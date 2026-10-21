@@ -142,7 +142,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     connection!.output.add(Uint8List.fromList(cmd.codeUnits));
     await connection!.output.allSent;
 
-    List<int> data = await connection!.input!.first.timeout(const Duration(milliseconds: 250), onTimeout: () => []);
+    List<int> data = await connection!.input!.first.timeout(
+      const Duration(milliseconds: 250),
+      onTimeout: () => Uint8List(0),
+    );
     return String.fromCharCodes(data);
   }
 
