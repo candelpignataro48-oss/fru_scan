@@ -402,7 +402,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (BuildContext context) {
         return Container(
           padding: const EdgeInsets.all(16),
-          
+          height: 450,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Seleziona Centralina (ECU)",
+                style: TextStyle(
+                  color: Color(0xFFFFB74D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Scegli quale centralina interrogare:",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: ecuList.length,
+                  itemBuilder: (context, index) {
+                    final ecu = ecuList[index];
+                    return ListTile(
+                      title: Text(
+                        ecu,
+                        style: TextStyle(
+                          color: selectedEcu == ecu ? const Color(0xFFFFB74D) : Colors.white,
+                          fontWeight: selectedEcu == ecu ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: selectedEcu == ecu && isEcuConnected
+                          ? const Icon(Icons.check, color: Color(0xFFFFB74D))
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          selectedEcu = ecu;
+                          isEcuConnected = true;
+                        });
+                        Navigator.pop(context);
+                        
+                        if (selectedEcu == "Centralina Motore (ECU)") {
+                          startObdLoop();
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget buildMetricCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+    required Color borderColor,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161A1D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor.withOpacity(0.6),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: accentColor, size: 28),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String? modelDropdownValue = selectedModel.isEmpty ? null : selectedModel;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'FRU SCAN',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: Color(0xFFFF
