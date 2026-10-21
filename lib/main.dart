@@ -534,28 +534,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (bar < -1.0) bar = -1.0;
         if (bar > 1.6) bar = 1.6;
         
-        return bar.toStringAsFixed(2);
-      }
-    } catch (_) {}
-    return turboVal;
-  }
-
-  String parseCoolant(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("05");
-      if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
-      }
-    } catch (_) {}
-    return coolantVal;
-  }
-
-  String parseOil(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("5C");
-      if (idx
