@@ -519,4 +519,199 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0B");
-      if (idx != -1 && parts
+      if (idx != -1 && parts.length > idx + 1) {
+        int kPa = int.parse(parts[idx + 1], radix: 16);
+        double bar = (kPa - 100) / 100.0;
+        if (bar < -1.0) bar = -1.0;
+        if (bar > 1.6) bar = 1.6;
+        return bar.toStringAsFixed(2);
+      }
+    } catch (_) {}
+    return turboVal;
+  }
+
+  String parseCoolant(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("05");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return coolantVal;
+  }
+
+  String parseOil(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("5C");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return oilVal;
+  }
+
+  String parseIat(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("0F");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return iatVal;
+  }
+
+  String parseCatalyst(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("3C");
+      if (idx != -1 && parts.length > idx + 2) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        int b = int.parse(parts[idx + 2], radix: 16);
+        double temp = (((a * 256) + b) / 10.0) - 40.0;
+        return temp.round().toString();
+      }
+    } catch (_) {}
+    return catalystVal;
+  }
+
+  String parseBattery(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
+      final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
+      if (match != null) {
+        return double.parse(match.group(1)!).toStringAsFixed(1);
+      }
+    } catch (_) {}
+    return batteryVal;
+  }
+
+  void _showEcuSelector() {
+    if (!isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Prima connetti l'adattatore Bluetooth OBD!")),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161A1D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          height: 450,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Seleziona Centralina (ECU)",
+                style: TextStyle(
+                  color: Color(0xFFFFB74D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Scegli quale centralina interrogare:",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: ecuList.length,
+                  itemBuilder: (context, index) {
+                    final ecu = ecuList[index];
+                    final bool isSelected = selectedEcu == ecu && isEcuConnected;
+                    return ListTile(
+                      title: Text(
+                        ecu,
+                        style: TextStyle(
+                          color: isSelected ? const Color(0xFFFFB74D) : Colors.white,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: Color(0xFFFFB74D))
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        connectToSelectedEcu(ecu);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget buildMetricCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+    required Color borderColor,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161A1D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor.withOpacity(0.9),
+          width: 2.5,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: accentColor, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
