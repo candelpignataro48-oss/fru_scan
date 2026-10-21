@@ -533,4 +533,294 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(
             fontWeight: FontWeight.w900,
             letterSpacing: 1.5,
-            color: Color(0xFFFF
+            color: Color(0xFFFFB74D),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
+                            foregroundColor: isConnected ? Colors.white : Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: isConnecting
+                              ? null
+                              : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
+                          child: Text(
+                            isConnecting
+                                ? "Connessione..."
+                                : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: isEcuConnected
+                            ? ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange[800],
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                                onPressed: disconnectEcu,
+                                child: const Text(
+                                  "DISCONNETTI ECU",
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            : OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFFB74D),
+                                  side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                                onPressed: _showEcuSelector,
+                                icon: const Icon(Icons.settings_input_component, size: 16),
+                                label: const Text(
+                                  "SELEZIONA ECU",
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Marca Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedBrand,
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: brandList.map((brand) {
+                              return DropdownMenuItem(
+                                value: brand,
+                                child: Text(brand),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                selectedBrand = val!;
+                                if (selectedBrand == "Fiat/Stellantis") {
+                                  selectedModel = "Tipo Cross 1.0 T3";
+                                } else {
+                                  selectedModel = "";
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Modello Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: modelDropdownValue,
+                            hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: selectedBrand == "Fiat/Stellantis"
+                                ? [
+                                    const DropdownMenuItem(
+                                      value: "Tipo Cross 1.0 T3",
+                                      child: Text("Tipo Cross 1.0 T3"),
+                                    )
+                                  ]
+                                : [],
+                            onChanged: selectedBrand == "Fiat/Stellantis"
+                                ? (val) {
+                                    setState(() {
+                                      selectedModel = val!;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            Expanded(
+              child: (isEcuConnected && selectedEcu == "Centralina Motore (ECU)")
+                  ? GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.35,
+                      children: [
+                        buildMetricCard(
+                          icon: Icons.speed,
+                          title: "Giri Motore",
+                          value: rpmVal,
+                          unit: "RPM",
+                          borderColor: Colors.orangeAccent,
+                          accentColor: Colors.orangeAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.directions_car,
+                          title: "Velocità",
+                          value: speedVal,
+                          unit: "km/h",
+                          borderColor: Colors.greenAccent,
+                          accentColor: Colors.greenAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.compress,
+                          title: "Pressione Turbina",
+                          value: turboVal,
+                          unit: "bar",
+                          borderColor: Colors.cyanAccent,
+                          accentColor: Colors.cyanAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.bolt,
+                          title: "Tensione Batteria",
+                          value: batteryVal,
+                          unit: "V",
+                          borderColor: Colors.purpleAccent,
+                          accentColor: Colors.purpleAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.thermostat,
+                          title: "Temp. Refrigerante",
+                          value: coolantVal,
+                          unit: "°C",
+                          borderColor: Colors.blueAccent,
+                          accentColor: Colors.blueAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.water_drop,
+                          title: "Temp. Olio",
+                          value: oilVal,
+                          unit: "°C",
+                          borderColor: Colors.amber,
+                          accentColor: Colors.amber,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.air,
+                          title: "Temp. Aria Aspirata",
+                          value: iatVal,
+                          unit: "°C",
+                          borderColor: Colors.tealAccent,
+                          accentColor: Colors.tealAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.local_fire_department,
+                          title: "Temp. Catalizzatore",
+                          value: catalystVal,
+                          unit: "°C",
+                          borderColor: Colors.deepOrangeAccent,
+                          accentColor: Colors.deepOrangeAccent,
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161A1D),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
+                            const SizedBox(height: 12),
+                            Text(
+                              isEcuConnected
+                                  ? "Connesso a: $selectedEcu\n(Nessun parametro da visualizzare per questa centralina)"
+                                  : "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
