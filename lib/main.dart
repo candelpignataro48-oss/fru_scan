@@ -50,8 +50,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String param2Val = "---";
   String param3Val = "---";
   String param4Val = "---";
-  String param5Val = "---";
-  String param6Val = "---";
 
   // Specifici Centralina Motore
   String rpmVal = "---";
@@ -324,7 +322,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
   }
 
-  // Motore di connessione multi-ECU stile AlfaOBD con configurazione canali ISO-TP
   void connectToSelectedEcu(String ecuName) async {
     setState(() {
       selectedEcu = ecuName;
@@ -334,7 +331,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final header = ecuHeaders[ecuName] ?? {"tx": "7E0", "rx": "7E8", "fc": "7E0"};
 
-    // Configurazione ELM327 / vLinker per la specifica centralina
     await queryObdCommand("AT SP 6\r", timeoutMs: 250);
     await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
     await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
@@ -344,18 +340,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
     await queryObdCommand("AT AT 1\r", timeoutMs: 200);
 
-    // Apertura sessione diagnostica UDS (Extended Diagnostic Session)
     await queryObdCommand("10 03\r", timeoutMs: 400);
 
-    // Lettura codice parte identificativo ECU (Servizio UDS 22 F187)
     String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
     String decodedPart = decodeUdsAscii(partResp);
 
     setState(() {
-      ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nHardware/Part Code: $decodedPart";
+      ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nHardware/Part Code:$decodedPart";
     });
 
-    // Avvio del loop di polling dedicato in base alla centralina selezionata
     if (selectedEcu == "Centralina Motore (ECU)") {
       startEngineLoop();
     } else if (selectedEcu == "Body Computer") {
@@ -427,7 +420,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  // Loop generico per interrogare dinamicamente qualsiasi altra centralina (ABS, Airbag, Quadro, ecc.)
   void startGenericEcuLoop() {
     _obdTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       if (!isEcuConnected || connection == null) {
@@ -437,7 +429,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       try {
         String voltResp = await queryObdCommand("ATRV\r");
-        String statusResp = await queryObdCommand("22 F1 90\r"); // Routine generica UDS stato centralina
+        String statusResp = await queryObdCommand("22 F1 90\r");
 
         if (mounted) {
           setState(() {
@@ -739,13 +731,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'FRU SCAN',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
-            color: Color(0xFFFFB74D),
-          ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.bolt, color: Color(0xFFFFB74D), size: 28),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'FRU SCAN',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.0,
+                    fontSize: 20,
+                    color: Color(0xFFFFB74D),
+                  ),
+                ),
+                Text(
+                  'FCA PROFESSIONAL OBD & UDS',
+                  style: TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 1.2,
+                    color: Colors.grey[400],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -1067,111 +1081,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   icon: Icons.battery_charging_full,
                                   title: "Carica Batteria (IBS)",
                                   value: bcmIbsSocVal,
-                                  unit: "%",
-                                  borderColor: Colors.greenAccent,
-                                  accentColor: Colors.greenAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.bolt,
-                                  title: "Tensione BCM",
-                                  value: bcmBatteryVoltVal,
-                                  unit: "V",
-                                  borderColor: Colors.purpleAccent,
-                                  accentColor: Colors.purpleAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.pin_drop,
-                                  title: "Contachilometri (Odo)",
-                                  value: bcmOdometerVal,
-                                  unit: "km",
-                                  borderColor: Colors.blueAccent,
-                                  accentColor: Colors.blueAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.lightbulb_outline,
-                                  title: "Stato Luci Esterne",
-                                  value: bcmLightsStatusVal,
-                                  unit: "",
-                                  borderColor: Colors.amber,
-                                  accentColor: Colors.amber,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.settings_ethernet,
-                                  title: "Allineamento Proxy",
-                                  value: bcmProxyStatusVal,
-                                  unit: "",
-                                  borderColor: Colors.tealAccent,
-                                  accentColor: Colors.tealAccent,
-                                ),
-                              ],
-                            )
-                          : GridView.count(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 1.45,
-                              children: [
-                                buildMetricCard(
-                                  icon: Icons.bolt,
-                                  title: "Tensione Linea ECU",
-                                  value: param1Val,
-                                  unit: "V",
-                                  borderColor: Colors.purpleAccent,
-                                  accentColor: Colors.purpleAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.info,
-                                  title: "Stato Risposta UDS",
-                                  value: param2Val,
-                                  unit: "",
-                                  borderColor: Colors.greenAccent,
-                                  accentColor: Colors.greenAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.check_circle_outline,
-                                  title: "Stato Connessione",
-                                  value: param3Val,
-                                  unit: "",
-                                  borderColor: Colors.cyanAccent,
-                                  accentColor: Colors.cyanAccent,
-                                ),
-                                buildMetricCard(
-                                  icon: Icons.shield_outlined,
-                                  title: "Diagnostica Canale",
-                                  value: param4Val,
-                                  unit: "",
-                                  borderColor: Colors.amber,
-                                  accentColor: Colors.amber,
-                                ),
-                              ],
-                            )))
-                  : Center(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF161A1D),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
-                            const SizedBox(height: 12),
-                            const Text(
-                              "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                                  
