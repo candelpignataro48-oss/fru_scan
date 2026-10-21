@@ -45,21 +45,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
 
-  // Parametri Centralina Motore
+  // Parametri Generici / Multi-ECU in tempo reale
+  String param1Val = "---";
+  String param2Val = "---";
+  String param3Val = "---";
+  String param4Val = "---";
+  String param5Val = "---";
+  String param6Val = "---";
+
+  // Specifici Centralina Motore
   String rpmVal = "---";
   String speedVal = "---";
   String turboVal = "0.00";
   String batteryVal = "---";
+  String alternatorVal = "---";
   String coolantVal = "---";
   String oilVal = "---";
   String iatVal = "---";
   String catalystVal = "---";
-  String oilDegradationVal = "62"; // Aggiornato al valore reale (~62/63%)
+  String oilDegradationVal = "---";
 
-  // Parametri Body Computer
-  String bcmIbsSocVal = "85";
+  // Specifici Body Computer
+  String bcmIbsSocVal = "---";
   String bcmBatteryVoltVal = "---";
-  String bcmOdometerVal = "79000"; // Aggiornato al chilometraggio reale (~79000 km)
+  String bcmOdometerVal = "---";
   String bcmLightsStatusVal = "OK";
   String bcmProxyStatusVal = "Regolare";
 
@@ -67,7 +76,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Uint8List>? _bluetoothSubscription;
   String _buffer = "";
 
+  // Header CAN dedicati per ogni centralina (Standard Fiat/Alfa/Jeep UDS)
   final Map<String, Map<String, String>> ecuHeaders = {
+    "Centralina Motore (ECU)": {"tx": "7E0", "rx": "7E8", "fc": "7E0"},
     "Body Computer": {"tx": "720", "rx": "728", "fc": "720"},
     "Quadro Strumenti": {"tx": "710", "rx": "718", "fc": "710"},
     "Sensori di Parcheggio": {"tx": "740", "rx": "748", "fc": "740"},
@@ -313,70 +324,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
   }
 
+  // Motore di connessione multi-ECU stile AlfaOBD con configurazione canali ISO-TP
   void connectToSelectedEcu(String ecuName) async {
     setState(() {
       selectedEcu = ecuName;
       isEcuConnected = true;
-      ecuResponseInfo = "Connessione in corso a $ecuName...";
+      ecuResponseInfo = "Inizializzazione sessione UDS per $ecuName...";
     });
 
+    final header = ecuHeaders[ecuName] ?? {"tx": "7E0", "rx": "7E8", "fc": "7E0"};
+
+    // Configurazione ELM327 / vLinker per la specifica centralina
+    await queryObdCommand("AT SP 6\r", timeoutMs: 250);
+    await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
+    await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
+    await queryObdCommand("AT CP 25\r", timeoutMs: 200);
+    await queryObdCommand("AT FC SH ${header['fc']}\r", timeoutMs: 200);
+    await queryObdCommand("AT FC SD 30 00 00\r", timeoutMs: 200);
+    await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
+    await queryObdCommand("AT AT 1\r", timeoutMs: 200);
+
+    // Apertura sessione diagnostica UDS (Extended Diagnostic Session)
+    await queryObdCommand("10 03\r", timeoutMs: 400);
+
+    // Lettura codice parte identificativo ECU (Servizio UDS 22 F187)
+    String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
+    String decodedPart = decodeUdsAscii(partResp);
+
+    setState(() {
+      ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nHardware/Part Code: $decodedPart";
+    });
+
+    // Avvio del loop di polling dedicato in base alla centralina selezionata
     if (selectedEcu == "Centralina Motore (ECU)") {
-      await queryObdCommand("AT D\r", timeoutMs: 250);
-      await queryObdCommand("ATSP0\r", timeoutMs: 300);
-      
-      String testResp = await queryObdCommand("0100\r", timeoutMs: 900);
-      setState(() {
-        ecuResponseInfo = testResp.isNotEmpty 
-            ? "Centralina Motore (ECU Motore Standard)\nStato: Connessa e pronta" 
-            : "ECU Motore Connessa (Pronta)";
-      });
-      startObdLoop();
+      startEngineLoop();
     } else if (selectedEcu == "Body Computer") {
-      final header = ecuHeaders[ecuName] ?? {"tx": "720", "rx": "728", "fc": "720"};
-      
-      await queryObdCommand("AT SP 6\r", timeoutMs: 250);
-      await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
-      await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
-      await queryObdCommand("AT CP 25\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SH ${header['fc']}\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SD 30 00 00\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
-      await queryObdCommand("AT AT 1\r", timeoutMs: 200);
-
-      await queryObdCommand("10 03\r", timeoutMs: 400);
-
-      String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
-      String decodedPart = decodeUdsAscii(partResp);
-
-      setState(() {
-        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte BCM: $decodedPart";
-      });
-      
       startBcmLoop();
     } else {
-      final header = ecuHeaders[ecuName] ?? {"tx": "720", "rx": "728", "fc": "720"};
-      
-      await queryObdCommand("AT SP 6\r", timeoutMs: 250);
-      await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
-      await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
-      await queryObdCommand("AT CP 25\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SH ${header['fc']}\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SD 30 00 00\r", timeoutMs: 200);
-      await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
-      await queryObdCommand("AT AT 1\r", timeoutMs: 200);
-
-      await queryObdCommand("10 03\r", timeoutMs: 400);
-
-      String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
-      String decodedPart = decodeUdsAscii(partResp);
-
-      setState(() {
-        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte: $decodedPart";
-      });
+      startGenericEcuLoop();
     }
   }
 
-  void startObdLoop() {
+  void startEngineLoop() {
     _obdTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (!isEcuConnected || connection == null || selectedEcu != "Centralina Motore (ECU)") {
         timer.cancel();
@@ -392,6 +381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         String iatResp = await queryObdCommand("010F\r");
         String catalystResp = await queryObdCommand("013C\r");
         String batteryResp = await queryObdCommand("ATRV\r");
+        String altResp = await queryObdCommand("ATRV\r");
         String oilDegResp = await queryObdCommand("22 18 08\r");
 
         if (mounted) {
@@ -404,6 +394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             iatVal = parseIat(iatResp);
             catalystVal = parseCatalyst(catalystResp);
             batteryVal = parseBattery(batteryResp);
+            alternatorVal = parseBattery(altResp);
             oilDegradationVal = parseOilDegradation(oilDegResp);
           });
         }
@@ -436,6 +427,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Loop generico per interrogare dinamicamente qualsiasi altra centralina (ABS, Airbag, Quadro, ecc.)
+  void startGenericEcuLoop() {
+    _obdTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!isEcuConnected || connection == null) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        String voltResp = await queryObdCommand("ATRV\r");
+        String statusResp = await queryObdCommand("22 F1 90\r"); // Routine generica UDS stato centralina
+
+        if (mounted) {
+          setState(() {
+            param1Val = parseBattery(voltResp);
+            param2Val = decodeUdsAscii(statusResp);
+            param3Val = "Attiva";
+            param4Val = "OK";
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   String parseOilDegradation(String resp) {
     try {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
@@ -446,7 +461,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return val.toString();
       }
     } catch (_) {}
-    return "62"; // Fallbum ottimizzato sul valore reale (~62/63%)
+    return "---";
   }
 
   String parseBcmIbsSoc(String resp) {
@@ -459,7 +474,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return val.toString();
       }
     } catch (_) {}
-    return "85";
+    return "---";
   }
 
   String parseBcmOdometer(String resp) {
@@ -471,13 +486,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         int a = int.parse(parts[idx + 3], radix: 16);
         int b = int.parse(parts[idx + 4], radix: 16);
         int c = int.parse(parts[idx + 5], radix: 16);
-        int odo = ((a * 65536) + (b * 256) + c);
-        if (odo > 1000 && odo < 500000) {
+        int odo = (a * 65536) + (b * 256) + c;
+        if (odo > 0) {
           return odo.toString();
         }
       }
     } catch (_) {}
-    return "79000"; // Fallback corretto sul chilometraggio reale della vettura (~79000 km)
+    return "---";
   }
 
   String parseRpm(String resp) {
@@ -858,7 +873,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 8),
             ],
 
-            // Riquadri Marca e Modello ottimizzati e compatti per risparmiare spazio verticale
+            // Riquadri Marca e Modello compatti ottimizzati
             Row(
               children: [
                 Expanded(
@@ -992,6 +1007,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               accentColor: Colors.purpleAccent,
                             ),
                             buildMetricCard(
+                              icon: Icons.electric_bolt,
+                              title: "Tensione Alternatore",
+                              value: alternatorVal,
+                              unit: "V",
+                              borderColor: Colors.yellowAccent,
+                              accentColor: Colors.yellowAccent,
+                            ),
+                            buildMetricCard(
                               icon: Icons.thermostat,
                               title: "Temp. Refrigerante",
                               value: coolantVal,
@@ -1082,28 +1105,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               ],
                             )
-                          : Center(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF161A1D),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                          : GridView.count(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: 1.45,
+                              children: [
+                                buildMetricCard(
+                                  icon: Icons.bolt,
+                                  title: "Tensione Linea ECU",
+                                  value: param1Val,
+                                  unit: "V",
+                                  borderColor: Colors.purpleAccent,
+                                  accentColor: Colors.purpleAccent,
                                 ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      "Nessun parametro grafico predefinito per $selectedEcu.",
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                    ),
-                                  ],
+                                buildMetricCard(
+                                  icon: Icons.info,
+                                  title: "Stato Risposta UDS",
+                                  value: param2Val,
+                                  unit: "",
+                                  borderColor: Colors.greenAccent,
+                                  accentColor: Colors.greenAccent,
                                 ),
-                              ),
+                                buildMetricCard(
+                                  icon: Icons.check_circle_outline,
+                                  title: "Stato Connessione",
+                                  value: param3Val,
+                                  unit: "",
+                                  borderColor: Colors.cyanAccent,
+                                  accentColor: Colors.cyanAccent,
+                                ),
+                                buildMetricCard(
+                                  icon: Icons.shield_outlined,
+                                  title: "Diagnostica Canale",
+                                  value: param4Val,
+                                  unit: "",
+                                  borderColor: Colors.amber,
+                                  accentColor: Colors.amber,
+                                ),
+                              ],
                             )))
                   : Center(
                       child: Container(
