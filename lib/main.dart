@@ -306,7 +306,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final parts = clean.split(RegExp(r'\s+'));
       
       int idx = parts.indexOf("62");
-      if (idx != -1 && parts.length > idx + 2) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 2;
+      if (hasIdx && hasLen) {
         List<int> asciiCodes = [];
         for (int i = idx + 3; i < parts.length; i++) {
           if (parts[i].length == 2) {
@@ -456,7 +458,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("62");
-      if (idx != -1 && parts.length > idx + 3) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 3;
+      if (hasIdx && hasLen) {
         int val = int.parse(parts[idx + 3], radix: 16);
         return val.toString();
       }
@@ -469,7 +473,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("62");
-      if (idx != -1 && parts.length > idx + 3) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 3;
+      if (hasIdx && hasLen) {
         int val = int.parse(parts[idx + 3], radix: 16);
         return val.toString();
       }
@@ -482,7 +488,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("62");
-      if (idx != -1 && parts.length > idx + 5) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 5;
+      if (hasIdx && hasLen) {
         int a = int.parse(parts[idx + 3], radix: 16);
         int b = int.parse(parts[idx + 4], radix: 16);
         int c = int.parse(parts[idx + 5], radix: 16);
@@ -500,7 +508,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0C");
-      if (idx != -1 && parts.length > idx + 2) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 2;
+      if (hasIdx && hasLen) {
         int a = int.parse(parts[idx + 1], radix: 16);
         int b = int.parse(parts[idx + 2], radix: 16);
         return (((a * 256) + b) / 4).round().toString();
@@ -514,7 +524,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0D");
-      if (idx != -1 && parts.length > idx + 1) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 1;
+      if (hasIdx && hasLen) {
         int a = int.parse(parts[idx + 1], radix: 16);
         return a.toString();
       }
@@ -527,10 +539,475 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0B");
-      if (idx != -1 && parts.length > idx + 1) {
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 1;
+      if (hasIdx && hasLen) {
         int kPa = int.parse(parts[idx + 1], radix: 16);
         double bar = (kPa - 100) / 100.0;
         
         if (bar < -1.0) bar = -1.0;
         if (bar > 1.6) bar = 1.6;
         
+        return bar.toStringAsFixed(2);
+      }
+    } catch (_) {}
+    return turboVal;
+  }
+
+  String parseCoolant(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("05");
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 1;
+      if (hasIdx && hasLen) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return coolantVal;
+  }
+
+  String parseOil(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("5C");
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 1;
+      if (hasIdx && hasLen) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return oilVal;
+  }
+
+  String parseIat(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("0F");
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 1;
+      if (hasIdx && hasLen) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return iatVal;
+  }
+
+  String parseCatalyst(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("3C");
+      bool hasIdx = idx != -1;
+      bool hasLen = parts.length > idx + 2;
+      if (hasIdx && hasLen) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        int b = int.parse(parts[idx + 2], radix: 16);
+        double temp = (((a * 256) + b) / 10.0) - 40.0;
+        return temp.round().toString();
+      }
+    } catch (_) {}
+    return catalystVal;
+  }
+
+  String parseBattery(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
+      final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
+      if (match != null) {
+        return double.parse(match.group(1)!).toStringAsFixed(1);
+      }
+    } catch (_) {}
+    return batteryVal;
+  }
+
+  void _showEcuSelector() {
+    if (!isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Prima connetti l'adattatore Bluetooth OBD!")),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161A1D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          height: 450,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Seleziona Centralina (ECU)",
+                style: TextStyle(
+                  color: Color(0xFFFFB74D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Scegli quale centralina interrogare:",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: ecuList.length,
+                  itemBuilder: (context, index) {
+                    final ecu = ecuList[index];
+                    final bool isSelected = selectedEcu == ecu && isEcuConnected;
+                    return ListTile(
+                      title: Text(
+                        ecu,
+                        style: TextStyle(
+                          color: isSelected ? const Color(0xFFFFB74D) : Colors.white,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check, color: Color(0xFFFFB74D))
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        connectToSelectedEcu(ecu);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget buildMetricCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+    required Color borderColor,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161A1D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor.withOpacity(0.9),
+          width: 2.5,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: accentColor, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String? modelDropdownValue = selectedModel.isEmpty ? null : selectedModel;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'FRU SCAN',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: Color(0xFFFFB74D),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
+                            foregroundColor: isConnected ? Colors.white : Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onPressed: isConnecting
+                              ? null
+                              : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
+                          child: Text(
+                            isConnecting
+                                ? "Connessione..."
+                                : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: isEcuConnected
+                            ? ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange[800],
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: disconnectEcu,
+                                child: const Text(
+                                  "DISCONNETTI ECU",
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            : OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFFB74D),
+                                  side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: _showEcuSelector,
+                                icon: const Icon(Icons.settings_input_component, size: 16),
+                                label: const Text(
+                                  "SELEZIONA ECU",
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            if (isEcuConnected) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161A1D),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent, size: 15),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Centralina Attiva: $selectedEcu",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      ecuResponseInfo,
+                      style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Riquadri Marca e Modello compatti ottimizzati
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text("Marca:", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedBrand,
+                              isExpanded: true,
+                              dropdownColor: const Color(0xFF161A1D),
+                              style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold),
+                              items: brandList.map((brand) {
+                                return DropdownMenuItem(
+                                  value: brand,
+                                  child: Text(brand),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  selectedBrand = val!;
+                                  if (selectedBrand == "Fiat/Stellantis") {
+                                    selectedModel = "Tipo Cross 1.0 T3";
+                                  } else {
+                                    selectedModel = "";
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text("Modello:", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: modelDropdownValue,
+                              hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              isExpanded: true,
+                              dropdownColor: const Color(0xFF161A1D),
+                              style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold),
+                              items: selectedBrand == "Fiat/Stellantis"
+                                  ? [
+                                      const DropdownMenuItem(
+                                        value: "Tipo Cross 1.0 T3",
+                                        child: Text("Tipo Cross 1.0 T3"),
+                                      )
+                                    ]
+                                  : [],
+                              onChanged: selectedBrand == "Fiat/Stellantis"
+                                  ? (val) {
+                                      setState(() {
+                                        selectedModel = val!;
+                                      });
+                                    }
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            Expanded(
+              child: isEcuConnected
+                  ? (selectedEcu == "Centralina Motore (ECU)"
+                      ? GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.45,
+                          children: [
+                            buildMetricCard(
+                              icon: Icons.speed,
+                              title: "Giri Motore",
+                              value: rpmVal,
+                              unit: "RPM",
+                              borderColor: Colors.orangeAccent,
+                              accentColor: Colors.orangeAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.directions_car,
+                              title: "Velocità",
+                              value: speedVal,
+                              unit: "km/h",
+                              borderColor: Colors.greenAccent,
+                              accentColor: Colors.
