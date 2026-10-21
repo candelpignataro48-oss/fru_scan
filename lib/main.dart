@@ -40,7 +40,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String selectedEcu = "Centralina Motore (ECU)";
   String connectedDeviceName = "";
 
-  // Valori dei parametri
+  // Selezione Marca e Modello per le altre ECU
+  String selectedBrand = "Fiat/Stellantis";
+  String selectedModel = "Tipo Cross 1.0 T3";
+
+  // Valori dei parametri Centralina Motore
   String rpmVal = "---";
   String speedVal = "---";
   String turboVal = "---";
@@ -48,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String coolantVal = "---";
   String oilVal = "---";
   String iatVal = "---";
+  String catalystVal = "---"; // Temp. Catalizzatore
 
   Timer? _obdTimer;
 
@@ -65,6 +70,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     "Blind Spot",
     "Telecamere",
     "Radar",
+  ];
+
+  final List<String> brandList = [
+    "Fiat/Stellantis",
+    "Alfa Romeo",
   ];
 
   @override
@@ -216,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       
+      // Eseguiamo il polling dei PID motore solo se è selezionata la Centralina Motore
       if (selectedEcu != "Centralina Motore (ECU)") {
         return; 
       }
@@ -227,6 +238,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         String coolant = await queryPid("0105\r");
         String oil = await queryPid("015C\r");
         String iat = await queryPid("010F\r");
+        String catalyst = await queryPid("013C\r"); // Temp. Catalizzatore
         
         await sendCommand("ATRV\r");
         String battery = await readResponse();
@@ -239,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             coolantVal = parseCoolant(coolant);
             oilVal = parseOil(oil);
             iatVal = parseIat(iat);
+            catalystVal = parseCatalyst(catalyst);
             batteryVal = parseBattery(battery);
           });
         }
@@ -341,6 +354,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return iatVal;
   }
 
+  String parseCatalyst(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("3C");
+      if (idx != -1 && parts.length > idx + 2) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        int b = int.parse(parts[idx + 2], radix: 16);
+        double temp = (((a * 256) + b) / 10.0) - 40.0;
+        return temp.round().toString();
+      }
+    } catch (_) {}
+    return catalystVal;
+  }
+
   String parseBattery(String resp) {
     try {
       final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
@@ -405,6 +433,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             coolantVal = "---";
                             oilVal = "---";
                             iatVal = "---";
+                            catalystVal = "---";
                           }
                         });
                         Navigator.pop(context);
@@ -529,7 +558,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // Pulsanti: Scegli Bluetooth a sinistra, SELEZIONA ECU a destra
                   Row(
                     children: [
                       Expanded(
@@ -583,72 +611,177 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Griglia dei parametri
+            // Visualizzazione condizionale: Griglia metriche se ECU Motore, altrimenti Selezione Marca/Modello
             Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.35,
-                children: [
-                  buildMetricCard(
-                    icon: Icons.speed,
-                    title: "Giri Motore",
-                    value: rpmVal,
-                    unit: "RPM",
-                    borderColor: Colors.orangeAccent,
-                    accentColor: Colors.orangeAccent,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.directions_car,
-                    title: "Velocità",
-                    value: speedVal,
-                    unit: "km/h",
-                    borderColor: Colors.greenAccent,
-                    accentColor: Colors.greenAccent,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.compress,
-                    title: "Pressione Turbina",
-                    value: turboVal,
-                    unit: "bar",
-                    borderColor: Colors.cyanAccent,
-                    accentColor: Colors.cyanAccent,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.bolt,
-                    title: "Tensione Batteria",
-                    value: batteryVal,
-                    unit: "V",
-                    borderColor: Colors.purpleAccent,
-                    accentColor: Colors.purpleAccent,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.thermostat,
-                    title: "Temp. Refrigerante",
-                    value: coolantVal,
-                    unit: "°C",
-                    borderColor: Colors.blueAccent,
-                    accentColor: Colors.blueAccent,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.water_drop,
-                    title: "Temp. Olio",
-                    value: oilVal,
-                    unit: "°C",
-                    borderColor: Colors.amber,
-                    accentColor: Colors.amber,
-                  ),
-                  buildMetricCard(
-                    icon: Icons.air,
-                    title: "Temp. Aria Aspirata",
-                    value: iatVal,
-                    unit: "°C",
-                    borderColor: Colors.tealAccent,
-                    accentColor: Colors.tealAccent,
-                  ),
-                ],
-              ),
+              child: selectedEcu == "Centralina Motore (ECU)"
+                  ? GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.35,
+                      children: [
+                        buildMetricCard(
+                          icon: Icons.speed,
+                          title: "Giri Motore",
+                          value: rpmVal,
+                          unit: "RPM",
+                          borderColor: Colors.orangeAccent,
+                          accentColor: Colors.orangeAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.directions_car,
+                          title: "Velocità",
+                          value: speedVal,
+                          unit: "km/h",
+                          borderColor: Colors.greenAccent,
+                          accentColor: Colors.greenAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.compress,
+                          title: "Pressione Turbina",
+                          value: turboVal,
+                          unit: "bar",
+                          borderColor: Colors.cyanAccent,
+                          accentColor: Colors.cyanAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.bolt,
+                          title: "Tensione Batteria",
+                          value: batteryVal,
+                          unit: "V",
+                          borderColor: Colors.purpleAccent,
+                          accentColor: Colors.purpleAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.thermostat,
+                          title: "Temp. Refrigerante",
+                          value: coolantVal,
+                          unit: "°C",
+                          borderColor: Colors.blueAccent,
+                          accentColor: Colors.blueAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.water_drop,
+                          title: "Temp. Olio",
+                          value: oilVal,
+                          unit: "°C",
+                          borderColor: Colors.amber,
+                          accentColor: Colors.amber,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.air,
+                          title: "Temp. Aria Aspirata",
+                          value: iatVal,
+                          unit: "°C",
+                          borderColor: Colors.tealAccent,
+                          accentColor: Colors.tealAccent,
+                        ),
+                        buildMetricCard(
+                          icon: Icons.local_fire_department,
+                          title: "Temp. Catalizzatore",
+                          value: catalystVal,
+                          unit: "°C",
+                          borderColor: Colors.deepOrangeAccent,
+                          accentColor: Colors.deepOrangeAccent,
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      children: [
+                        // Riquadro per la scelta del Marchio
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF161A1D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Marca Auto",
+                                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                value: selectedBrand,
+                                dropdownColor: const Color(0xFF161A1D),
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color(0xFF0E1113),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                items: brandList.map((brand) {
+                                  return DropdownMenuItem(
+                                    value: brand,
+                                    child: Text(brand),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  setState(() {
+                                    selectedBrand = val!;
+                                    if (selectedBrand == "Fiat/Stellantis") {
+                                      selectedModel = "Tipo Cross 1.0 T3";
+                                    } else {
+                                      selectedModel = ""; // Vuoto per Alfa Romeo
+                                    }
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Riquadro per la scelta del Modello
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF161A1D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Modello Auto",
+                                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                value: selectedModel.isEmpty ? null : selectedModel,
+                                hint: const Text("Nessun modello disponibile", style: TextStyle(color: Colors.grey)),
+                                dropdownColor: const Color(0xFF161A1D),
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color(0xFF0E1113),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                items: selectedBrand == "Fiat/Stellantis"
+                                    ? [
+                                        const DropdownMenuItem(
+                                          value: "Tipo Cross 1.0 T3",
+                                          child: Text("Tipo Cross 1.0 T3"),
+                                        )
+                                      ]
+                                    : [], // Vuoto per Alfa Romeo
+                                onChanged: selectedBrand == "Fiat/Stellantis"
+                                    ? (val) {
+                                        setState(() {
+                                          selectedModel = val!;
+                                        });
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
