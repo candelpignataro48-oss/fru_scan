@@ -715,3 +715,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEcuMetricsGrid() {
+    if (selectedEcu == "Centralina Motore (ECU)") {
+      return GridView.count(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.45,
+        children
