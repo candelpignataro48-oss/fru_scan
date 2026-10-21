@@ -16,8 +16,8 @@ class FruScanApp extends StatelessWidget {
     return MaterialApp(
       title: 'Fru Scan',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.black,
-        primaryColor: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        primaryColor: Colors.cyanAccent,
       ),
       home: const DashboardScreen(),
     );
@@ -38,8 +38,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String statusMessage = "Disconnesso";
 
   String rpmVal = "0";
-  String tempVal = "- °C";
-  String speedVal = "- km/h";
+  String tempVal = "-";
+  String speedVal = "-";
 
   Timer? _obdTimer;
 
@@ -170,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       int idx = parts.indexOf("05");
       if (idx != -1 && parts.length > idx + 1) {
         int a = int.parse(parts[idx + 1], radix: 16);
-        return "${a - 40} °C";
+        return (a - 40).toString();
       }
     } catch (_) {}
     return tempVal;
@@ -183,10 +183,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
       int idx = parts.indexOf("0D");
       if (idx != -1 && parts.length > idx + 1) {
         int a = int.parse(parts[idx + 1], radix: 16);
-        return "$a km/h";
+        return a.toString();
       }
     } catch (_) {}
     return speedVal;
+  }
+
+  Widget buildMetricCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1D1D),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF00838F),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: const Color(0xFF00E5FF),
+            size: 32,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF00E5FF),
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                unit,
+                style: const TextStyle(
+                  color: Color(0xFF00E5FF),
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -194,7 +258,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Fru Scan'),
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -202,89 +268,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isConnected ? Colors.green : Colors.blue,
-                minimumSize: const Size.fromHeight(50),
+                backgroundColor: isConnected ? Colors.green[700] : const Color(0xFF00838F),
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               onPressed: isConnecting ? null : connectToDevice,
               child: Text(
                 isConnecting ? "Connessione in corso..." : (isConnected ? "Dispositivi Connessi" : "Connetti vLinker"),
-                style: const TextStyle(fontSize: 16, color: Colors.white),
+                style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(statusMessage, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 24),
-            
-            // RPM Card
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(8)),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.settings_suggest, color: Colors.grey, size: 18),
-                        SizedBox(width: 8),
-                        Text("GIRI MOTORE (RPM)", style: TextStyle(color: Colors.grey, fontSize: 14)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(rpmVal, style: const TextStyle(color: Colors.greenAccent, fontSize: 56, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
+            const SizedBox(height: 6),
+            Text(statusMessage, style: const TextStyle(color: Colors.grey, fontSize: 13)),
             const SizedBox(height: 16),
+            
+            Expanded(
+              child: buildMetricCard(
+                icon: Icons.compress,
+                title: "Giri Motore",
+                value: rpmVal,
+                unit: "rpm",
+              ),
+            ),
+            const SizedBox(height: 14),
 
-            // Temp & Speed Row
             Expanded(
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(8)),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.thermostat, color: Colors.orangeAccent, size: 16),
-                              SizedBox(width: 6),
-                              Text("TEMPERATURA", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(tempVal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 32, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                    child: buildMetricCard(
+                      icon: Icons.thermostat,
+                      title: "Temperatura",
+                      value: tempVal,
+                      unit: "°C",
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(8)),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.speed, color: Colors.lightBlueAccent, size: 16),
-                              SizedBox(width: 6),
-                              Text("VELOCITÀ", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(speedVal, style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 32, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                    child: buildMetricCard(
+                      icon: Icons.speed,
+                      title: "Velocità",
+                      value: speedVal,
+                      unit: "km/h",
                     ),
                   ),
                 ],
