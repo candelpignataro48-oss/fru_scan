@@ -42,7 +42,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String connectedDeviceName = "";
   String ecuResponseInfo = "Nessuna ECU interrogata";
 
-  // Inversione: Modello a sinistra, Marca a destra (o viceversa come preferisci)
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
 
@@ -283,13 +282,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else {
       String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
       setState(() {
-        ecuResponseInfo = "Risposta ECU ($selectedEcu): ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
+        ecuResponseInfo = "Risposta ECU ($selectedEcu):${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
       });
     }
   }
 
   void startObdLoop() {
-    // Refresh impostato esattamente a 1 secondo come richiesto
     _obdTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (!isEcuConnected || connection == null || selectedEcu != "Centralina Motore (ECU)") {
         timer.cancel();
@@ -346,7 +344,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return a.toString();
       }
     } catch (_) {}
-    return "0"; // Se fermo o errore di lettura, mostra 0 km/h
+    return "0";
   }
 
   String parseTurbo(String resp) {
@@ -356,9 +354,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       int idx = parts.indexOf("0B");
       if (idx != -1 && parts.length > idx + 1) {
         int kPa = int.parse(parts[idx + 1], radix: 16);
-        // Formula corretta MAP per turbo benzina: pressione assoluta (kPa) - 100 kPa / 100 per avere i bar relativi
         double bar = (kPa - 100) / 100.0;
-        if (bar < 0) bar = 0.0; // Evita valori negativi al minimo
+        if (bar < 0) bar = 0.0;
         return bar.toStringAsFixed(2);
       }
     } catch (_) {}
@@ -424,7 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
       final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
       if (match != null) {
-        return double.parse(match.group(1)! ).toStringAsFixed(1);
+        return double.parse(match.group(1)!).toStringAsFixed(1);
       }
     } catch (_) {}
     return batteryVal;
@@ -481,419 +478,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       trailing: selectedEcu == ecu && isEcuConnected
                           ? const Icon(Icons.check, color: Color(0xFFFFB74D))
                           : null,
-                      onTap: () {
-                        Navigator.pop(context);
-                        connectToSelectedEcu(ecu);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget buildMetricCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required String unit,
-    required Color borderColor,
-    required Color accentColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161A1D),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: borderColor.withOpacity(0.6),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: accentColor, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF9E9E9E),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  color: accentColor,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: TextStyle(
-                  color: accentColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    String? modelDropdownValue = selectedModel.isEmpty ? null : selectedModel;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'FRU SCAN',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
-            color: Color(0xFFFFB74D),
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            // 1. Box principale Bluetooth e Seleziona ECU
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A1D),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
-                            foregroundColor: isConnected ? Colors.white : Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          onPressed: isConnecting
-                              ? null
-                              : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
-                          child: Text(
-                            isConnecting
-                                ? "Connessione..."
-                                : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: isEcuConnected
-                            ? ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange[800],
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                onPressed: disconnectEcu,
-                                child: const Text(
-                                  "DISCONNETTI ECU",
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              )
-                            : OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFFFFB74D),
-                                  side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                onPressed: _showEcuSelector,
-                                icon: const Icon(Icons.settings_input_component, size: 16),
-                                label: const Text(
-                                  "SELEZIONA ECU",
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // 2. Riquadro Info Centralina Connessa (Spostato IN ALTO, sopra marca e modello)
-            if (isEcuConnected) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161A1D),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Centralina Attiva: $selectedEcu",
-                          style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      ecuResponseInfo,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // 3. Riquadri Marca e Modello (Invertiti di posizione: Modello a sinistra, Marca a destra)
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161A1D),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Modello Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                        const SizedBox(height: 4),
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: modelDropdownValue,
-                            hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF161A1D),
-                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                            items: selectedBrand == "Fiat/Stellantis"
-                                ? [
-                                    const DropdownMenuItem(
-                                      value: "Tipo Cross 1.0 T3",
-                                      child: Text("Tipo Cross 1.0 T3"),
-                                    )
-                                  ]
-                                : [],
-                            onChanged: selectedBrand == "Fiat/Stellantis"
-                                ? (val) {
-                                    setState(() {
-                                      selectedModel = val!;
-                                    });
-                                  }
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161A1D),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Marca Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                        const SizedBox(height: 4),
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedBrand,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF161A1D),
-                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                            items: brandList.map((brand) {
-                              return DropdownMenuItem(
-                                value: brand,
-                                child: Text(brand),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              setState(() {
-                                selectedBrand = val!;
-                                if (selectedBrand == "Fiat/Stellantis") {
-                                  selectedModel = "Tipo Cross 1.0 T3";
-                                } else {
-                                  selectedModel = "";
-                                }
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // 4. Area inferiore: Griglia metriche (se ECU Motore) oppure guida
-            Expanded(
-              child: (isEcuConnected && selectedEcu == "Centralina Motore (ECU)")
-                  ? GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.35,
-                      children: [
-                        buildMetricCard(
-                          icon: Icons.speed,
-                          title: "Giri Motore",
-                          value: rpmVal,
-                          unit: "RPM",
-                          borderColor: Colors.orangeAccent,
-                          accentColor: Colors.orangeAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.directions_car,
-                          title: "Velocità",
-                          value: speedVal,
-                          unit: "km/h",
-                          borderColor: Colors.greenAccent,
-                          accentColor: Colors.greenAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.compress,
-                          title: "Pressione Turbina",
-                          value: turboVal,
-                          unit: "bar",
-                          borderColor: Colors.cyanAccent,
-                          accentColor: Colors.cyanAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.bolt,
-                          title: "Tensione Batteria",
-                          value: batteryVal,
-                          unit: "V",
-                          borderColor: Colors.purpleAccent,
-                          accentColor: Colors.purpleAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.thermostat,
-                          title: "Temp. Refrigerante",
-                          value: coolantVal,
-                          unit: "°C",
-                          borderColor: Colors.blueAccent,
-                          accentColor: Colors.blueAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.water_drop,
-                          title: "Temp. Olio",
-                          value: oilVal,
-                          unit: "°C",
-                          borderColor: Colors.amber,
-                          accentColor: Colors.amber,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.air,
-                          title: "Temp. Aria Aspirata",
-                          value: iatVal,
-                          unit: "°C",
-                          borderColor: Colors.tealAccent,
-                          accentColor: Colors.tealAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.local_fire_department,
-                          title: "Temp. Catalizzatore",
-                          value: catalystVal,
-                          unit: "°C",
-                          borderColor: Colors.deepOrangeAccent,
-                          accentColor: Colors.deepOrangeAccent,
-                        ),
-                      ],
-                    )
-                  : Center(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF161A1D),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
-                            const SizedBox(height: 12),
-                            Text(
-                              isEcuConnected
-                                  ? "Nessun parametro diagnostico da visualizzare per $selectedEcu."
-                                  : "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                      
