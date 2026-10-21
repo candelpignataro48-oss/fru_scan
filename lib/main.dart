@@ -15,9 +15,10 @@ class FruScanApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Fru Scan',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        primaryColor: Colors.cyanAccent,
+        scaffoldBackgroundColor: const Color(0xFF090B0E),
+        primaryColor: const Color(0xFF00F2FE),
       ),
       home: const DashboardScreen(),
     );
@@ -39,7 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String rpmVal = "0";
   String tempVal = "-";
-  String speedVal = "-";
+  String turboVal = "-";
 
   Timer? _obdTimer;
 
@@ -68,7 +69,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await requestPermissions();
 
     setState(() {
-      statusMessage = "Ricerca dispositivi associati...";
+      statusMessage = "Ricerca vLinker MC+...";
     });
 
     try {
@@ -87,11 +88,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isConnected = true;
         isConnecting = false;
-        statusMessage = "Connesso";
+        statusMessage = "Connesso alla Fiat Tipo T3";
       });
 
       await sendCommand("ATZ\r");
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 250));
       await sendCommand("ATE0\r");
       await Future.delayed(const Duration(milliseconds: 100));
       await sendCommand("ATSP0\r");
@@ -124,13 +125,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       try {
         String rpm = await queryPid("010C\r");
         String temp = await queryPid("0105\r");
-        String speed = await queryPid("010D\r");
+        String turbo = await queryPid("010B\r");
 
         if (mounted) {
           setState(() {
             rpmVal = parseRpm(rpm);
             tempVal = parseTemp(temp);
-            speedVal = parseSpeed(speed);
+            turboVal = parseTurbo(turbo);
           });
         }
       } catch (_) {}
@@ -176,17 +177,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return tempVal;
   }
 
-  String parseSpeed(String resp) {
+  String parseTurbo(String resp) {
     try {
       final clean = resp.replaceAll(">", "").trim();
       final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("0D");
+      int idx = parts.indexOf("0B");
       if (idx != -1 && parts.length > idx + 1) {
         int a = int.parse(parts[idx + 1], radix: 16);
-        return a.toString();
+        double bar = a / 100.0;
+        return bar.toStringAsFixed(2);
       }
     } catch (_) {}
-    return speedVal;
+    return turboVal;
   }
 
   Widget buildMetricCard({
@@ -194,36 +196,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String title,
     required String value,
     required String unit,
+    required Color accentColor,
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1D1D),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF131720),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF00838F),
-          width: 1.5,
+          color: accentColor.withOpacity(0.3),
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            color: const Color(0xFF00E5FF),
-            size: 32,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: accentColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  color: Color(0xFF8B95A5),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF9E9E9E),
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -231,19 +243,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  color: Color(0xFF00E5FF),
-                  fontSize: 36,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 42,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(width: 6),
               Text(
                 unit,
-                style: const TextStyle(
-                  color: Color(0xFF00E5FF),
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                style: TextStyle(
+                  color: accentColor.withOpacity(0.8),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -257,7 +270,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Fru Scan'),
+        title: const Text(
+          'FRU SCAN // T3',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.0,
+            color: Color(0xFF00F2FE),
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -266,52 +287,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isConnected ? Colors.green[700] : const Color(0xFF00838F),
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            // Pulsante di connessione sportivo
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isConnected ? const Color(0xFF00C853) : const Color(0xFF131720),
+                  foregroundColor: Colors.white,
+                  side: BorderSide(
+                    color: isConnected ? const Color(0xFF00C853) : const Color(0xFF00F2FE).withOpacity(0.5),
+                    width: 1.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 4,
+                ),
+                onPressed: isConnecting ? null : connectToDevice,
+                child: Text(
+                  isConnecting ? "CONNESSIONE IN CORSO..." : (isConnected ? "SISTEMA CONNESSO" : "CONNETTI VLINKER"),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
-              onPressed: isConnecting ? null : connectToDevice,
-              child: Text(
-                isConnecting ? "Connessione in corso..." : (isConnected ? "Dispositivi Connessi" : "Connetti vLinker"),
-                style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              statusMessage.toUpperCase(),
+              style: const TextStyle(
+                color: Color(0xFF626F84),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.0,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(statusMessage, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             
+            // Riquadro Principale: Giri Motore (RPM)
             Expanded(
+              flex: 5,
               child: buildMetricCard(
-                icon: Icons.compress,
+                icon: Icons.speed_rounded,
                 title: "Giri Motore",
                 value: rpmVal,
                 unit: "rpm",
+                accentColor: const Color(0xFF00F2FE),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
+            // Riquadri Secondari: Temperatura e Pressione Turbina
             Expanded(
+              flex: 5,
               child: Row(
                 children: [
                   Expanded(
                     child: buildMetricCard(
-                      icon: Icons.thermostat,
+                      icon: Icons.thermostat_rounded,
                       title: "Temperatura",
                       value: tempVal,
                       unit: "°C",
+                      accentColor: const Color(0xFFFF9100),
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: buildMetricCard(
-                      icon: Icons.speed,
-                      title: "Velocità",
-                      value: speedVal,
-                      unit: "km/h",
+                      icon: Icons.compress_rounded,
+                      title: "Turbina",
+                      value: turboVal,
+                      unit: "bar",
+                      accentColor: const Color(0xFF00E676),
                     ),
                   ),
                 ],
@@ -323,4 +373,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-
