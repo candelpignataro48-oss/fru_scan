@@ -194,12 +194,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         statusMessage = "Bluetooth Connesso";
       });
 
-      // Ascolto continuo dello stream Bluetooth per accumulare i dati nel buffer
       _bluetoothSubscription = connection!.input!.listen((data) {
         _buffer += String.fromCharCodes(data);
       });
 
-      // Inizializzazione standard ELM327
       await sendCommand("ATZ\r");
       await Future.delayed(const Duration(milliseconds: 300));
       await sendCommand("ATE0\r");
@@ -246,7 +244,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Funzione robusta per inviare un comando e attendere la risposta completa dall'ELM327 (fino al carattere '>')
   Future<String> queryObdCommand(String cmd, {int timeoutMs = 400}) async {
     if (connection == null || !connection!.isConnected) return "";
     
@@ -275,19 +272,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     if (selectedEcu == "Centralina Motore (ECU)") {
-      // Test di risposta rapida per conferma connessione ECU Motore
       String testResp = await queryObdCommand("0100\r", timeoutMs: 800);
       setState(() {
         ecuResponseInfo = testResp.isNotEmpty 
-            ? "ECU Motore Connessa (Risposta: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')})" 
-            : "Connesso a ECU Motore (Nessuna risposta al test PID 0100)";
+            ? "Risposta ECU Motore: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')}" 
+            : "ECU Motore Connessa (Nessuna risposta al test PID 0100)";
       });
       startObdLoop();
     } else {
-      // Per le altre centraline, inviamo un comando UDS/ISO standard di test o mostriamo la conferma
       String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
       setState(() {
-        ecuResponseInfo = "Connesso a $selectedEcu\nRisposta ECU: ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ') : 'Pronta'}";
+        ecuResponseInfo = "Risposta ECU ($selectedEcu): ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
       });
     }
   }
@@ -423,7 +418,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String parseBattery(String resp) {
     try {
       final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
-      // Estrae il valore numerico della tensione dalla risposta ATRV
       final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
       if (match != null) {
         return double.parse(match.group(1)! ).toStringAsFixed(1);
@@ -756,6 +750,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
+            // Riquadro di conferma connessione ECU (visibile SOLO quando una centralina è connessa)
+            if (isEcuConnected) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161A1D),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Centralina Attiva: $selectedEcu",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      ecuResponseInfo,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Area dinamica inferiore: Griglia metriche (se ECU Motore) oppure messaggio guida
             Expanded(
               child: (isEcuConnected && selectedEcu == "Centralina Motore (ECU)")
                   ? GridView.count(
@@ -846,7 +875,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                             Text(
                               isEcuConnected
-                                  ? "Connesso a: $selectedEcu\n\n[Conferma Connessione ECU]\n$ecuResponseInfo"
+                                  ? "Nessun parametro diagnostico da visualizzare per $selectedEcu."
                                   : "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.grey, fontSize: 13),
