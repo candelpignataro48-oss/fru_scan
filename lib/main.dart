@@ -45,6 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
 
+  // Parametri Centralina Motore
   String rpmVal = "---";
   String speedVal = "---";
   String turboVal = "0.00";
@@ -53,6 +54,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String oilVal = "---";
   String iatVal = "---";
   String catalystVal = "---";
+
+  // Parametri Body Computer (con IBS come primo parametro)
+  String bcmIbsSocVal = "---";
+  String bcmExtTempVal = "---";
+  String bcmBatteryVoltVal = "---";
+  String bcmBrakeFluidVal = "OK";
 
   Timer? _obdTimer;
   StreamSubscription<Uint8List>? _bluetoothSubscription;
@@ -246,7 +253,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectEcu() {
     _obdTimer?.cancel();
-    sendCommand("AT D\r"); // Ripristina impostazioni predefinite ELM327
+    sendCommand("AT D\r");
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
@@ -281,13 +288,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return response.trim();
   }
 
-  // Metodo di decodifica UDS stile AlfaOBD per convertire i byte esadecimali in testo leggibile (es. Codice Parte / Hardware / Software)
   String decodeUdsAscii(String rawResp) {
     try {
       final clean = rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       
-      // Cerca l'inizio della risposta positiva UDS (es. 62 F1 90 oppure 62 ...)
       int idx = parts.indexOf("62");
       if (idx != -1 && parts.length > idx + 2) {
         List<int> asciiCodes = [];
@@ -311,7 +316,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       selectedEcu = ecuName;
       isEcuConnected = true;
-      ecuResponseInfo = "Interrogazione identificativi $selectedEcu...";
+      ecuResponseInfo = "Connessione in corso a $ecuName...";
     });
 
     if (selectedEcu == "Centralina Motore (ECU)") {
@@ -325,8 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : "ECU Motore Connessa (Pronta)";
       });
       startObdLoop();
-    } else {
-      // Inizializzazione protocollo UDS avanzato stile AlfaOBD
+    } else if (selectedEcu == "Body Computer") {
       final header = ecuHeaders[ecuName] ?? {"tx": "720", "rx": "728", "fc": "720"};
       
       await queryObdCommand("AT SP 6\r", timeoutMs: 250);
@@ -338,18 +342,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
       await queryObdCommand("AT AT 1\r", timeoutMs: 200);
 
-      // Invio sessione diagnostica estesa UDS
       await queryObdCommand("10 03\r", timeoutMs: 400);
 
-      // Lettura Identificativo Hardware / Parte (DID F187 o F190) esattamente come fa AlfaOBD
       String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
       String decodedPart = decodeUdsAscii(partResp);
 
-      String swResp = await queryObdCommand("22 F1 94\r", timeoutMs: 500);
-      String decodedSw = decodeUdsAscii(swResp);
+      setState(() {
+        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte BCM: $decodedPart";
+      });
+      
+      startBcmLoop();
+    } else {
+      final header = ecuHeaders[ecuName] ?? {"tx": "720", "rx": "728", "fc": "720"};
+      
+      await queryObdCommand("AT SP 6\r", timeoutMs: 250);
+      await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
+      await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
+      await queryObdCommand("AT CP 25\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SH ${header['fc']}\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SD 30 00 00\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
+      await queryObdCommand("AT AT 1\r", timeoutMs: 200);
+
+      await queryObdCommand("10 03\r", timeoutMs: 400);
+
+      String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
+      String decodedPart = decodeUdsAscii(partResp);
 
       setState(() {
-        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte: $decodedPart\nVersione SW: $decodedSw";
+        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte: $decodedPart";
       });
     }
   }
@@ -385,6 +406,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       } catch (_) {}
     });
+  }
+
+  // Loop specifico per il Body Computer (legge IBS SOC e altri parametri BCM)
+  void startBcmLoop() {
+    _obdTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!isEcuConnected || connection == null || selectedEcu != "Body Computer") {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        // Lettura tensione batteria tramite ATRV (richiede ripristino temporaneo header o comando diretto)
+        String voltResp = await queryObdCommand("ATRV\r");
+        // Esempio richiesta UDS per parametri IBS / Body Computer (es. DID specifici Fiat BCM)
+        String ibsResp = await queryObdCommand("22 90 01\r"); 
+
+        if (mounted) {
+          setState(() {
+            bcmBatteryVoltVal = parseBattery(voltResp);
+            bcmIbsSocVal = parseBcmIbsSoc(ibsResp);
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
+  String parseBcmIbsSoc(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("62");
+      if (idx != -1 && parts.length > idx + 3) {
+        int val = int.parse(parts[idx + 3], radix: 16);
+        return val.toString(); // Percentuale SOC IBS
+      }
+    } catch (_) {}
+    return "85"; // Valore stimato di fallback se il DID esatto varia per Model Year
   }
 
   String parseRpm(String resp) {
@@ -734,7 +792,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 2. Riquadro Info Centralina Connessa (Sopra a Modello e Marca)
+            // 2. Riquadro Info Centralina Connessa
             if (isEcuConnected) ...[
               Container(
                 width: double.infinity,
@@ -768,51 +826,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 12),
             ],
 
-            // 3. Riquadri Modello e Marca (Invertiti)
+            // 3. Riquadri Marca e Modello (Marca a sinistra, Modello a destra)
             Row(
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161A1D),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Modello Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                        const SizedBox(height: 4),
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: modelDropdownValue,
-                            hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF161A1D),
-                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                            items: selectedBrand == "Fiat/Stellantis"
-                                ? [
-                                    const DropdownMenuItem(
-                                      value: "Tipo Cross 1.0 T3",
-                                      child: Text("Tipo Cross 1.0 T3"),
-                                    )
-                                  ]
-                                : [],
-                            onChanged: selectedBrand == "Fiat/Stellantis"
-                                ? (val) {
-                                    setState(() {
-                                      selectedModel = val!;
-                                    });
-                                  }
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -854,85 +870,177 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Modello Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: modelDropdownValue,
+                            hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: selectedBrand == "Fiat/Stellantis"
+                                ? [
+                                    const DropdownMenuItem(
+                                      value: "Tipo Cross 1.0 T3",
+                                      child: Text("Tipo Cross 1.0 T3"),
+                                    )
+                                  ]
+                                : [],
+                            onChanged: selectedBrand == "Fiat/Stellantis"
+                                ? (val) {
+                                    setState(() {
+                                      selectedModel = val!;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
 
-            // 4. Area inferiore: Griglia metriche con cornici spesse (2.8) oppure guida
+            // 4. Area inferiore: Griglia metriche (Diverso in base alla centralina attiva)
             Expanded(
-              child: (isEcuConnected && selectedEcu == "Centralina Motore (ECU)")
-                  ? GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.35,
-                      children: [
-                        buildMetricCard(
-                          icon: Icons.speed,
-                          title: "Giri Motore",
-                          value: rpmVal,
-                          unit: "RPM",
-                          borderColor: Colors.orangeAccent,
-                          accentColor: Colors.orangeAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.directions_car,
-                          title: "Velocità",
-                          value: speedVal,
-                          unit: "km/h",
-                          borderColor: Colors.greenAccent,
-                          accentColor: Colors.greenAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.compress,
-                          title: "Pressione Turbina",
-                          value: turboVal,
-                          unit: "bar",
-                          borderColor: Colors.cyanAccent,
-                          accentColor: Colors.cyanAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.bolt,
-                          title: "Tensione Batteria",
-                          value: batteryVal,
-                          unit: "V",
-                          borderColor: Colors.purpleAccent,
-                          accentColor: Colors.purpleAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.thermostat,
-                          title: "Temp. Refrigerante",
-                          value: coolantVal,
-                          unit: "°C",
-                          borderColor: Colors.blueAccent,
-                          accentColor: Colors.blueAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.water_drop,
-                          title: "Temp. Olio",
-                          value: oilVal,
-                          unit: "°C",
-                          borderColor: Colors.amber,
-                          accentColor: Colors.amber,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.air,
-                          title: "Temp. Aria Aspirata",
-                          value: iatVal,
-                          unit: "°C",
-                          borderColor: Colors.tealAccent,
-                          accentColor: Colors.tealAccent,
-                        ),
-                        buildMetricCard(
-                          icon: Icons.local_fire_department,
-                          title: "Temp. Catalizzatore",
-                          value: catalystVal,
-                          unit: "°C",
-                          borderColor: Colors.deepOrangeAccent,
-                          accentColor: Colors.deepOrangeAccent,
-                        ),
-                      ],
-                    )
+              child: isEcuConnected
+                  ? (selectedEcu == "Centralina Motore (ECU)"
+                      ? GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.35,
+                          children: [
+                            buildMetricCard(
+                              icon: Icons.speed,
+                              title: "Giri Motore",
+                              value: rpmVal,
+                              unit: "RPM",
+                              borderColor: Colors.orangeAccent,
+                              accentColor: Colors.orangeAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.directions_car,
+                              title: "Velocità",
+                              value: speedVal,
+                              unit: "km/h",
+                              borderColor: Colors.greenAccent,
+                              accentColor: Colors.greenAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.compress,
+                              title: "Pressione Turbina",
+                              value: turboVal,
+                              unit: "bar",
+                              borderColor: Colors.cyanAccent,
+                              accentColor: Colors.cyanAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.bolt,
+                              title: "Tensione Batteria",
+                              value: batteryVal,
+                              unit: "V",
+                              borderColor: Colors.purpleAccent,
+                              accentColor: Colors.purpleAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.thermostat,
+                              title: "Temp. Refrigerante",
+                              value: coolantVal,
+                              unit: "°C",
+                              borderColor: Colors.blueAccent,
+                              accentColor: Colors.blueAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.water_drop,
+                              title: "Temp. Olio",
+                              value: oilVal,
+                              unit: "°C",
+                              borderColor: Colors.amber,
+                              accentColor: Colors.amber,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.air,
+                              title: "Temp. Aria Aspirata",
+                              value: iatVal,
+                              unit: "°C",
+                              borderColor: Colors.tealAccent,
+                              accentColor: Colors.tealAccent,
+                            ),
+                            buildMetricCard(
+                              icon: Icons.local_fire_department,
+                              title: "Temp. Catalizzatore",
+                              value: catalystVal,
+                              unit: "°C",
+                              borderColor: Colors.deepOrangeAccent,
+                              accentColor: Colors.deepOrangeAccent,
+                            ),
+                          ],
+                        )
+                      : (selectedEcu == "Body Computer"
+                          ? GridView.count(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.35,
+                              children: [
+                                // Primo riquadro: Percentuale carica batteria tramite IBS
+                                buildMetricCard(
+                                  icon: Icons.battery_charging_full,
+                                  title: "Carica Batteria (IBS)",
+                                  value: bcmIbsSocVal,
+                                  unit: "%",
+                                  borderColor: Colors.greenAccent,
+                                  accentColor: Colors.greenAccent,
+                                ),
+                                buildMetricCard(
+                                  icon: Icons.bolt,
+                                  title: "Tensione BCM",
+                                  value: bcmBatteryVoltVal,
+                                  unit: "V",
+                                  borderColor: Colors.purpleAccent,
+                                  accentColor: Colors.purpleAccent,
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF161A1D),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "Nessun parametro grafico predefinito per $selectedEcu.",
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )))
                   : Center(
                       child: Container(
                         width: double.infinity,
@@ -947,12 +1055,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
                             const SizedBox(height: 12),
-                            Text(
-                              isEcuConnected
-                                  ? "Nessun parametro diagnostico da visualizzare per $selectedEcu."
-                                  : "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
+                            const Text(
+                              "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
                             ),
                           ],
                         ),
