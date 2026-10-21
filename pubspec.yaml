@@ -1,5 +1,5 @@
 name: fru_scan
-description: A simple OBD2 scanner app for vLinker MC+
+description: Applicazione Fru Scan per adattatore vLinker MC+
 publish_to: 'none'
 version: 1.0.0+1
 
