@@ -90,7 +90,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         statusMessage = "Connesso";
       });
 
-      // Inizializzazione ELM327
       await sendCommand("ATZ\r");
       await Future.delayed(const Duration(milliseconds: 200));
       await sendCommand("ATE0\r");
@@ -123,11 +122,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       try {
-        // Richiedi RPM (010C)
         String rpm = await queryPid("010C\r");
-        // Richiedi Temp Acqua (0105)
         String temp = await queryPid("0105\r");
-        // Richiedi Velocità (010D)
         String speed = await queryPid("010D\r");
 
         if (mounted) {
@@ -146,7 +142,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     connection!.output.add(Uint8List.fromList(cmd.codeUnits));
     await connection!.output.allSent;
 
-    // Leggi risposta bufferizzata breve
     List<int> data = await connection!.input.first.timeout(const Duration(milliseconds: 250), onTimeout: () => []);
     return String.fromCharCodes(data);
   }
@@ -217,7 +212,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(statusMessage, style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
             
-            // RPM Card
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -235,7 +229,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Temp & Speed Row
             Expanded(
               child: Row(
                 children: [
