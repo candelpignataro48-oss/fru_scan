@@ -50,6 +50,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String param2Val = "---";
   String param3Val = "---";
   String param4Val = "---";
+  String param5Val = "---";
+  String param6Val = "---";
 
   // Specifici Centralina Motore
   String rpmVal = "---";
@@ -322,6 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
   }
 
+  // Motore di connessione multi-ECU stile AlfaOBD con configurazione canali ISO-TP
   void connectToSelectedEcu(String ecuName) async {
     setState(() {
       selectedEcu = ecuName;
@@ -331,6 +334,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final header = ecuHeaders[ecuName] ?? {"tx": "7E0", "rx": "7E8", "fc": "7E0"};
 
+    // Configurazione ELM327 / vLinker per la specifica centralina
     await queryObdCommand("AT SP 6\r", timeoutMs: 250);
     await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
     await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
@@ -340,8 +344,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
     await queryObdCommand("AT AT 1\r", timeoutMs: 200);
 
+    // Apertura sessione diagnostica UDS (Extended Diagnostic Session)
     await queryObdCommand("10 03\r", timeoutMs: 400);
 
+    // Lettura codice parte identificativo ECU (Servizio UDS 22 F187)
     String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
     String decodedPart = decodeUdsAscii(partResp);
 
@@ -349,6 +355,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nHardware/Part Code:$decodedPart";
     });
 
+    // Avvio del loop di polling dedicato in base alla centralina selezionata
     if (selectedEcu == "Centralina Motore (ECU)") {
       startEngineLoop();
     } else if (selectedEcu == "Body Computer") {
@@ -420,6 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Loop generico per interrogare dinamicamente qualsiasi altra centralina (ABS, Airbag, Quadro, ecc.)
   void startGenericEcuLoop() {
     _obdTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       if (!isEcuConnected || connection == null) {
@@ -429,7 +437,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       try {
         String voltResp = await queryObdCommand("ATRV\r");
-        String statusResp = await queryObdCommand("22 F1 90\r");
+        String statusResp = await queryObdCommand("22 F1 90\r"); // Routine generica UDS stato centralina
 
         if (mounted) {
           setState(() {
@@ -522,8 +530,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (idx != -1 && parts.length > idx + 1) {
         int kPa = int.parse(parts[idx + 1], radix: 16);
         double bar = (kPa - 100) / 100.0;
+        
         if (bar < -1.0) bar = -1.0;
         if (bar > 1.6) bar = 1.6;
+        
         return bar.toStringAsFixed(2);
       }
     } catch (_) {}
@@ -548,33 +558,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("5C");
-      if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
-      }
-    } catch (_) {}
-    return oilVal;
-  }
-
-  String parseIat(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("0F");
-      if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
-      }
-    } catch (_) {}
-    return iatVal;
-  }
-
-  String parseCatalyst(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("3C");
-      if (idx != -1 && parts.length > idx + 2) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        int b = int.parse(parts[idx + 2], radix: 16);
-        double temp = (((a * 25
+      if (idx
