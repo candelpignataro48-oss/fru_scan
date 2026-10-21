@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_bluetooth_serial_ble: ^4.0.0
+  flutter_bluetooth_serial_ble: ^0.5.0
   permission_handler: ^11.3.1
 
 dev_dependencies:
