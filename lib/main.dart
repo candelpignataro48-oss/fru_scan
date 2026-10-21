@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   runApp(const FruScanApp());
@@ -47,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String rpmVal = "---";
   String speedVal = "---";
-  String turboVal = "---";
+  String turboVal = "0.00";
   String batteryVal = "---";
   String coolantVal = "---";
   String oilVal = "---";
@@ -84,6 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _obdTimer?.cancel();
     _bluetoothSubscription?.cancel();
     connection?.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -218,6 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _obdTimer?.cancel();
     _bluetoothSubscription?.cancel();
     connection?.dispose();
+    WakelockPlus.disable();
     setState(() {
       isConnected = false;
       isEcuConnected = false;
@@ -230,6 +233,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectEcu() {
     _obdTimer?.cancel();
+    WakelockPlus.disable();
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
@@ -278,12 +282,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? "Risposta ECU Motore: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')}" 
             : "ECU Motore Connessa (Pronta)";
       });
+      WakelockPlus.enable();
       startObdLoop();
     } else {
       String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
       setState(() {
         ecuResponseInfo = "Risposta ECU ($selectedEcu): ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
       });
+      WakelockPlus.enable();
     }
   }
 
@@ -344,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return a.toString();
       }
     } catch (_) {}
-    return "0";
+    return speedVal;
   }
 
   String parseTurbo(String resp) {
@@ -355,11 +361,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (idx != -1 && parts.length > idx + 1) {
         int kPa = int.parse(parts[idx + 1], radix: 16);
         double bar = (kPa - 100) / 100.0;
-        if (bar < 0) bar = 0.0;
+        
+        if (bar < -1.0) bar = -1.0;
+        if (bar > 1.6) bar = 1.6;
+        
         return bar.toStringAsFixed(2);
       }
     } catch (_) {}
-    return "0.00";
+    return turboVal;
   }
 
   String parseCoolant(String resp) {
