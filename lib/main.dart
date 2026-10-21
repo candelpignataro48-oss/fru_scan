@@ -58,21 +58,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Uint8List>? _bluetoothSubscription;
   String _buffer = "";
 
-  // Mappatura CAN Header specifici per le centraline FCA / Stellantis (TX e RX)
+  // Mappatura CAN Header UDS avanzati per le centraline FCA / Stellantis (Stile AlfaOBD)
   final Map<String, Map<String, String>> ecuHeaders = {
-    "Centralina Motore (ECU)": {"tx": "7E0", "rx": "7E8"},
-    "Body Computer": {"tx": "720", "rx": "728"},
-    "Quadro Strumenti": {"tx": "710", "rx": "718"},
-    "Sensori di Parcheggio": {"tx": "740", "rx": "748"},
-    "Servosterzo": {"tx": "730", "rx": "738"},
-    "Cruise Control": {"tx": "750", "rx": "758"},
-    "Climatizzatore": {"tx": "760", "rx": "768"},
-    "Radio": {"tx": "770", "rx": "778"},
-    "ABS": {"tx": "7A0", "rx": "7A8"},
-    "Airbag": {"tx": "7C0", "rx": "7C8"},
-    "Blind Spot": {"tx": "780", "rx": "788"},
-    "Telecamere": {"tx": "790", "rx": "798"},
-    "Radar": {"tx": "7B0", "rx": "7B8"},
+    "Body Computer": {"tx": "720", "rx": "728", "fc": "720"},
+    "Quadro Strumenti": {"tx": "710", "rx": "718", "fc": "710"},
+    "Sensori di Parcheggio": {"tx": "740", "rx": "748", "fc": "740"},
+    "Servosterzo": {"tx": "730", "rx": "738", "fc": "730"},
+    "Cruise Control": {"tx": "750", "rx": "758", "fc": "750"},
+    "Climatizzatore": {"tx": "760", "rx": "768", "fc": "760"},
+    "Radio": {"tx": "770", "rx": "778", "fc": "770"},
+    "ABS": {"tx": "7A0", "rx": "7A8", "fc": "7A0"},
+    "Airbag": {"tx": "7C0", "rx": "7C8", "fc": "7C0"},
+    "Blind Spot": {"tx": "780", "rx": "788", "fc": "780"},
+    "Telecamere": {"tx": "790", "rx": "798", "fc": "790"},
+    "Radar": {"tx": "7B0", "rx": "7B8", "fc": "7B0"},
   };
 
   final List<String> ecuList = [
@@ -247,8 +246,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectEcu() {
     _obdTimer?.cancel();
-    // Ripristina i CAN header di default all'uscita
-    sendCommand("AT D\r");
+    sendCommand("AT D\r"); // Ripristina impostazioni predefinite ELM327
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
@@ -263,7 +261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<String> queryObdCommand(String cmd, {int timeoutMs = 400}) async {
+  Future<String> queryObdCommand(String cmd, {int timeoutMs = 450}) async {
     if (connection == null || !connection!.isConnected) return "";
     
     _buffer = "";
@@ -283,35 +281,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return response.trim();
   }
 
+  // Metodo di decodifica UDS stile AlfaOBD per convertire i byte esadecimali in testo leggibile (es. Codice Parte / Hardware / Software)
+  String decodeUdsAscii(String rawResp) {
+    try {
+      final clean = rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      
+      // Cerca l'inizio della risposta positiva UDS (es. 62 F1 90 oppure 62 ...)
+      int idx = parts.indexOf("62");
+      if (idx != -1 && parts.length > idx + 2) {
+        List<int> asciiCodes = [];
+        for (int i = idx + 3; i < parts.length; i++) {
+          if (parts[i].length == 2) {
+            int? val = int.tryParse(parts[i], radix: 16);
+            if (val != null && val >= 32 && val <= 126) {
+              asciiCodes.add(val);
+            }
+          }
+        }
+        if (asciiCodes.isNotEmpty) {
+          return String.fromCharCodes(asciiCodes);
+        }
+      }
+    } catch (_) {}
+    return rawResp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+  }
+
   void connectToSelectedEcu(String ecuName) async {
     setState(() {
       selectedEcu = ecuName;
       isEcuConnected = true;
-      ecuResponseInfo = "Configurazione CAN Header per $selectedEcu...";
+      ecuResponseInfo = "Interrogazione identificativi $selectedEcu...";
     });
 
-    // Recupera gli header CAN dedicati per la centralina scelta
-    final header = ecuHeaders[ecuName] ?? {"tx": "7E0", "rx": "7E8"};
-
-    // Configurazione protocollo e indirizzamento fisico ELM327
-    await queryObdCommand("AT SP 6\r", timeoutMs: 300);
-    await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 300);
-    await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 300);
-    await queryObdCommand("AT AT 1\r", timeoutMs: 200);
-
     if (selectedEcu == "Centralina Motore (ECU)") {
-      String testResp = await queryObdCommand("0100\r", timeoutMs: 800);
+      await queryObdCommand("AT D\r", timeoutMs: 250);
+      await queryObdCommand("ATSP0\r", timeoutMs: 300);
+      
+      String testResp = await queryObdCommand("0100\r", timeoutMs: 900);
       setState(() {
         ecuResponseInfo = testResp.isNotEmpty 
-            ? "Risposta ECU Motore: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')}" 
+            ? "Centralina Motore (ECU Motore Standard)\nStato: Connessa e pronta" 
             : "ECU Motore Connessa (Pronta)";
       });
       startObdLoop();
     } else {
-      // Per le altre centraline inviamo una richiesta di sessione diagnostica UDS personalizzata con l'header attivo
-      String testResp = await queryObdCommand("10 03\r", timeoutMs: 700);
+      // Inizializzazione protocollo UDS avanzato stile AlfaOBD
+      final header = ecuHeaders[ecuName] ?? {"tx": "720", "rx": "728", "fc": "720"};
+      
+      await queryObdCommand("AT SP 6\r", timeoutMs: 250);
+      await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 250);
+      await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 250);
+      await queryObdCommand("AT CP 25\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SH ${header['fc']}\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SD 30 00 00\r", timeoutMs: 200);
+      await queryObdCommand("AT FC SM 1\r", timeoutMs: 200);
+      await queryObdCommand("AT AT 1\r", timeoutMs: 200);
+
+      // Invio sessione diagnostica estesa UDS
+      await queryObdCommand("10 03\r", timeoutMs: 400);
+
+      // Lettura Identificativo Hardware / Parte (DID F187 o F190) esattamente come fa AlfaOBD
+      String partResp = await queryObdCommand("22 F1 87\r", timeoutMs: 500);
+      String decodedPart = decodeUdsAscii(partResp);
+
+      String swResp = await queryObdCommand("22 F1 94\r", timeoutMs: 500);
+      String decodedSw = decodeUdsAscii(swResp);
+
       setState(() {
-        ecuResponseInfo = "ECU $selectedEcu (TX: ${header['tx']} RX: ${header['rx']})\nRisposta: ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Nessuna risposta dal modulo'}";
+        ecuResponseInfo = "$selectedEcu (TX:${header['tx']} / RX:${header['rx']})\nCodice Parte: $decodedPart\nVersione SW: $decodedSw";
       });
     }
   }
