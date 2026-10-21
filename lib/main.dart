@@ -215,6 +215,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(statusMessage, style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
             
+            // RPM Card
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -223,7 +224,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("GIRI MOTORE (RPM)", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.settings_suggest, color: Colors.grey, size: 18),
+                        SizedBox(width: 8),
+                        Text("GIRI MOTORE (RPM)", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Text(rpmVal, style: const TextStyle(color: Colors.greenAccent, fontSize: 56, fontWeight: FontWeight.bold)),
                   ],
@@ -232,6 +240,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Temp & Speed Row
             Expanded(
               child: Row(
                 children: [
@@ -242,7 +251,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("TEMPERATURA", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.thermostat, color: Colors.orangeAccent, size: 16),
+                              SizedBox(width: 6),
+                              Text("TEMPERATURA", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           Text(tempVal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 32, fontWeight: FontWeight.bold)),
                         ],
@@ -257,7 +273,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("VELOCITÀ", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.speed, color: Colors.lightBlueAccent, size: 16),
+                              SizedBox(width: 6),
+                              Text("VELOCITÀ", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           Text(speedVal, style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 32, fontWeight: FontWeight.bold)),
                         ],
