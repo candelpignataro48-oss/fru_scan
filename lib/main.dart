@@ -58,6 +58,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Uint8List>? _bluetoothSubscription;
   String _buffer = "";
 
+  // Mappatura CAN Header specifici per le centraline FCA / Stellantis (TX e RX)
+  final Map<String, Map<String, String>> ecuHeaders = {
+    "Centralina Motore (ECU)": {"tx": "7E0", "rx": "7E8"},
+    "Body Computer": {"tx": "720", "rx": "728"},
+    "Quadro Strumenti": {"tx": "710", "rx": "718"},
+    "Sensori di Parcheggio": {"tx": "740", "rx": "748"},
+    "Servosterzo": {"tx": "730", "rx": "738"},
+    "Cruise Control": {"tx": "750", "rx": "758"},
+    "Climatizzatore": {"tx": "760", "rx": "768"},
+    "Radio": {"tx": "770", "rx": "778"},
+    "ABS": {"tx": "7A0", "rx": "7A8"},
+    "Airbag": {"tx": "7C0", "rx": "7C8"},
+    "Blind Spot": {"tx": "780", "rx": "788"},
+    "Telecamere": {"tx": "790", "rx": "798"},
+    "Radar": {"tx": "7B0", "rx": "7B8"},
+  };
+
   final List<String> ecuList = [
     "Centralina Motore (ECU)",
     "Body Computer",
@@ -230,6 +247,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectEcu() {
     _obdTimer?.cancel();
+    // Ripristina i CAN header di default all'uscita
+    sendCommand("AT D\r");
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
@@ -268,8 +287,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       selectedEcu = ecuName;
       isEcuConnected = true;
-      ecuResponseInfo = "Connessione in corso a $selectedEcu...";
+      ecuResponseInfo = "Configurazione CAN Header per $selectedEcu...";
     });
+
+    // Recupera gli header CAN dedicati per la centralina scelta
+    final header = ecuHeaders[ecuName] ?? {"tx": "7E0", "rx": "7E8"};
+
+    // Configurazione protocollo e indirizzamento fisico ELM327
+    await queryObdCommand("AT SP 6\r", timeoutMs: 300);
+    await queryObdCommand("AT SH ${header['tx']}\r", timeoutMs: 300);
+    await queryObdCommand("AT CRA ${header['rx']}\r", timeoutMs: 300);
+    await queryObdCommand("AT AT 1\r", timeoutMs: 200);
 
     if (selectedEcu == "Centralina Motore (ECU)") {
       String testResp = await queryObdCommand("0100\r", timeoutMs: 800);
@@ -280,9 +308,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
       startObdLoop();
     } else {
-      String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
+      // Per le altre centraline inviamo una richiesta di sessione diagnostica UDS personalizzata con l'header attivo
+      String testResp = await queryObdCommand("10 03\r", timeoutMs: 700);
       setState(() {
-        ecuResponseInfo = "Risposta ECU ($selectedEcu): ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
+        ecuResponseInfo = "ECU $selectedEcu (TX: ${header['tx']} RX: ${header['rx']})\nRisposta: ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Nessuna risposta dal modulo'}";
       });
     }
   }
