@@ -42,6 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String connectedDeviceName = "";
   String ecuResponseInfo = "Nessuna ECU interrogata";
 
+  // Inversione: Modello a sinistra, Marca a destra (o viceversa come preferisci)
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
 
@@ -276,7 +277,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         ecuResponseInfo = testResp.isNotEmpty 
             ? "Risposta ECU Motore: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')}" 
-            : "ECU Motore Connessa (Nessuna risposta al test PID 0100)";
+            : "ECU Motore Connessa (Pronta)";
       });
       startObdLoop();
     } else {
@@ -288,7 +289,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void startObdLoop() {
-    _obdTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+    // Refresh impostato esattamente a 1 secondo come richiesto
+    _obdTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (!isEcuConnected || connection == null || selectedEcu != "Centralina Motore (ECU)") {
         timer.cancel();
         return;
@@ -322,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseRpm(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0C");
       if (idx != -1 && parts.length > idx + 2) {
@@ -336,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseSpeed(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0D");
       if (idx != -1 && parts.length > idx + 1) {
@@ -344,26 +346,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return a.toString();
       }
     } catch (_) {}
-    return speedVal;
+    return "0"; // Se fermo o errore di lettura, mostra 0 km/h
   }
 
   String parseTurbo(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0B");
       if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        double bar = a / 100.0;
+        int kPa = int.parse(parts[idx + 1], radix: 16);
+        // Formula corretta MAP per turbo benzina: pressione assoluta (kPa) - 100 kPa / 100 per avere i bar relativi
+        double bar = (kPa - 100) / 100.0;
+        if (bar < 0) bar = 0.0; // Evita valori negativi al minimo
         return bar.toStringAsFixed(2);
       }
     } catch (_) {}
-    return turboVal;
+    return "0.00";
   }
 
   String parseCoolant(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("05");
       if (idx != -1 && parts.length > idx + 1) {
@@ -376,7 +380,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseOil(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("5C");
       if (idx != -1 && parts.length > idx + 1) {
@@ -389,7 +393,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseIat(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("0F");
       if (idx != -1 && parts.length > idx + 1) {
@@ -402,7 +406,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseCatalyst(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").trim();
+      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
       final parts = clean.split(RegExp(r'\s+'));
       int idx = parts.indexOf("3C");
       if (idx != -1 && parts.length > idx + 2) {
@@ -575,6 +579,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
+            // 1. Box principale Bluetooth e Seleziona ECU
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -661,50 +666,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161A1D),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            // 2. Riquadro Info Centralina Connessa (Spostato IN ALTO, sopra marca e modello)
+            if (isEcuConnected) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161A1D),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        const Text("Marca Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                        const SizedBox(height: 4),
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedBrand,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF161A1D),
-                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                            items: brandList.map((brand) {
-                              return DropdownMenuItem(
-                                value: brand,
-                                child: Text(brand),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              setState(() {
-                                selectedBrand = val!;
-                                if (selectedBrand == "Fiat/Stellantis") {
-                                  selectedModel = "Tipo Cross 1.0 T3";
-                                } else {
-                                  selectedModel = "";
-                                }
-                              });
-                            },
-                          ),
+                        const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Centralina Attiva: $selectedEcu",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Text(
+                      ecuResponseInfo,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // 3. Riquadri Marca e Modello (Invertiti di posizione: Modello a sinistra, Marca a destra)
+            Row(
+              children: [
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -746,45 +744,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Marca Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedBrand,
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: brandList.map((brand) {
+                              return DropdownMenuItem(
+                                value: brand,
+                                child: Text(brand),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                selectedBrand = val!;
+                                if (selectedBrand == "Fiat/Stellantis") {
+                                  selectedModel = "Tipo Cross 1.0 T3";
+                                } else {
+                                  selectedModel = "";
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
 
-            // Riquadro di conferma connessione ECU (visibile SOLO quando una centralina è connessa)
-            if (isEcuConnected) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161A1D),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Centralina Attiva: $selectedEcu",
-                          style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      ecuResponseInfo,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // Area dinamica inferiore: Griglia metriche (se ECU Motore) oppure messaggio guida
+            // 4. Area inferiore: Griglia metriche (se ECU Motore) oppure guida
             Expanded(
               child: (isEcuConnected && selectedEcu == "Centralina Motore (ECU)")
                   ? GridView.count(
