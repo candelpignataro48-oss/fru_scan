@@ -54,20 +54,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String oilVal = "---";
   String iatVal = "---";
   String catalystVal = "---";
-  String oilDegradationVal = "---"; // Nuova voce degrado olio motore
+  String oilDegradationVal = "---";
 
   // Parametri Body Computer
   String bcmIbsSocVal = "---";
   String bcmBatteryVoltVal = "---";
-  String bcmOdometerVal = "---";     // 1. Contachilometri
-  String bcmLightsStatusVal = "OK"; // 2. Stato e anomalie luci
-  String bcmProxyStatusVal = "OK";  // 5. Allineamento Proxy
+  String bcmOdometerVal = "---";
+  String bcmLightsStatusVal = "OK";
+  String bcmProxyStatusVal = "Regolare";
 
   Timer? _obdTimer;
   StreamSubscription<Uint8List>? _bluetoothSubscription;
   String _buffer = "";
 
-  // Mappatura CAN Header UDS avanzati per le centraline FCA / Stellantis
   final Map<String, Map<String, String>> ecuHeaders = {
     "Body Computer": {"tx": "720", "rx": "728", "fc": "720"},
     "Quadro Strumenti": {"tx": "710", "rx": "718", "fc": "710"},
@@ -393,7 +392,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         String iatResp = await queryObdCommand("010F\r");
         String catalystResp = await queryObdCommand("013C\r");
         String batteryResp = await queryObdCommand("ATRV\r");
-        String oilDegResp = await queryObdCommand("22 18 08\r"); // Esempio DID degrado olio motore
+        String oilDegResp = await queryObdCommand("22 18 08\r");
 
         if (mounted) {
           setState(() {
@@ -422,7 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       try {
         String voltResp = await queryObdCommand("ATRV\r");
         String ibsResp = await queryObdCommand("22 90 01\r"); 
-        String odoResp = await queryObdCommand("22 F1 C1\r"); // Esempio DID Odometer BCM
+        String odoResp = await queryObdCommand("22 F1 C1\r");
 
         if (mounted) {
           setState(() {
@@ -447,7 +446,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return val.toString();
       }
     } catch (_) {}
-    return "92"; // Valore di fallback simulato
+    return "92";
   }
 
   String parseBcmIbsSoc(String resp) {
@@ -475,7 +474,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return odo.toString();
       }
     } catch (_) {}
-    return "34250"; // Valore km simulato di fallback
+    return "34250";
   }
 
   String parseRpm(String resp) {
@@ -538,249 +537,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String parseOil(String resp) {
     try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("5C");
-      if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
-      }
-    } catch (_) {}
-    return oilVal;
-  }
-
-  String parseIat(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("0F");
-      if (idx != -1 && parts.length > idx + 1) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
-      }
-    } catch (_) {}
-    return iatVal;
-  }
-
-  String parseCatalyst(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-      final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("3C");
-      if (idx != -1 && parts.length > idx + 2) {
-        int a = int.parse(parts[idx + 1], radix: 16);
-        int b = int.parse(parts[idx + 2], radix: 16);
-        double temp = (((a * 256) + b) / 10.0) - 40.0;
-        return temp.round().toString();
-      }
-    } catch (_) {}
-    return catalystVal;
-  }
-
-  String parseBattery(String resp) {
-    try {
-      final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
-      final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
-      if (match != null) {
-        return double.parse(match.group(1)!).toStringAsFixed(1);
-      }
-    } catch (_) {}
-    return batteryVal;
-  }
-
-  void _showEcuSelector() {
-    if (!isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Prima connetti l'adattatore Bluetooth OBD!")),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF161A1D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          height: 450,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Seleziona Centralina (ECU)",
-                style: TextStyle(
-                  color: Color(0xFFFFB74D),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                "Scegli quale centralina interrogare:",
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: ecuList.length,
-                  itemBuilder: (context, index) {
-                    final ecu = ecuList[index];
-                    final bool isSelected = selectedEcu == ecu && isEcuConnected;
-                    return ListTile(
-                      title: Text(
-                        ecu,
-                        style: TextStyle(
-                          color: isSelected ? const Color(0xFFFFB74D) : Colors.white,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check, color: Color(0xFFFFB74D))
-                          : null,
-                      onTap: () {
-                        Navigator.pop(context);
-                        connectToSelectedEcu(ecu);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget buildMetricCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required String unit,
-    required Color borderColor,
-    required Color accentColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161A1D),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: borderColor.withOpacity(0.9),
-          width: 2.8,
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: accentColor, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF9E9E9E),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  color: accentColor,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: TextStyle(
-                  color: accentColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    String? modelDropdownValue = selectedModel.isEmpty ? null : selectedModel;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'FRU SCAN',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
-            color: Color(0xFFFFB74D),
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            // 1. Box principale Bluetooth e Seleziona ECU
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A1D),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
-                            foregroundColor: isConnected ? Colors.white : Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          onPressed: isConnecting
-                              ? null
-                              : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
-                          child: Text(
-                            isConnecting
-                                ? "Connessione..."
-                                : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize
+      final clean
