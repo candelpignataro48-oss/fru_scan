@@ -24,6 +24,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Generate Flutter Project Structure
+        run: flutter create . --platforms=android --project-name=fru_scan --org com.fru.scan
+
       - name: Get Dependencies
         run: flutter pub get
 
