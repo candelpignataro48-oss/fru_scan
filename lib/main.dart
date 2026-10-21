@@ -40,7 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String selectedEcu = "Centralina Motore (ECU)";
   String connectedDeviceName = "";
 
-  // Selezione Marca e Modello per le altre ECU
+  // Selezione fissa Marca e Modello nella schermata principale
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
 
@@ -52,7 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String coolantVal = "---";
   String oilVal = "---";
   String iatVal = "---";
-  String catalystVal = "---"; // Temp. Catalizzatore
+  String catalystVal = "---";
 
   Timer? _obdTimer;
 
@@ -93,7 +93,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ].request();
   }
 
-  // Mostra il popup con tutti i dispositivi Bluetooth associati
   void _showBluetoothDeviceSelector() async {
     setState(() {
       isConnecting = true;
@@ -176,7 +175,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Connessione al dispositivo scelto dall'utente
   void connectToDevice(BluetoothDevice device) async {
     setState(() {
       isConnecting = true;
@@ -193,7 +191,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         statusMessage = "Connesso";
       });
 
-      // Inizializzazione ELM327
       await sendCommand("ATZ\r");
       await Future.delayed(const Duration(milliseconds: 250));
       await sendCommand("ATE0\r");
@@ -226,7 +223,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       
-      // Eseguiamo il polling dei PID motore solo se è selezionata la Centralina Motore
       if (selectedEcu != "Centralina Motore (ECU)") {
         return; 
       }
@@ -238,7 +234,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         String coolant = await queryPid("0105\r");
         String oil = await queryPid("015C\r");
         String iat = await queryPid("010F\r");
-        String catalyst = await queryPid("013C\r"); // Temp. Catalizzatore
+        String catalyst = await queryPid("013C\r");
         
         await sendCommand("ATRV\r");
         String battery = await readResponse();
@@ -426,15 +422,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         setState(() {
                           selectedEcu = ecu;
-                          if (selectedEcu != "Centralina Motore (ECU)") {
-                            rpmVal = "---";
-                            speedVal = "---";
-                            turboVal = "---";
-                            coolantVal = "---";
-                            oilVal = "---";
-                            iatVal = "---";
-                            catalystVal = "---";
-                          }
                         });
                         Navigator.pop(context);
                       },
@@ -530,7 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Box principale con Stato Bluetooth e i due pulsanti (Scegli Bluetooth a sinistra, SELEZIONA ECU a destra)
+            // 1. Box principale con Stato Bluetooth e i due pulsanti
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -611,9 +598,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Visualizzazione condizionale: Griglia metriche se ECU Motore, altrimenti Selezione Marca/Modello
+            // 2. Riquadri fissi di Marca e Modello sempre visibili nella pagina principale
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Marca Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedBrand,
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: brandList.map((brand) {
+                              return DropdownMenuItem(
+                                value: brand,
+                                child: Text(brand),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setState(() {
+                                selectedBrand = val!;
+                                if (selectedBrand == "Fiat/Stellantis") {
+                                  selectedModel = "Tipo Cross 1.0 T3";
+                                } else {
+                                  selectedModel = "";
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A1D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Modello Auto", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedModel.isEmpty ? null : selectedModel,
+                            hint: const Text("Nessun modello", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF161A1D),
+                            style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
+                            items: selectedBrand == "Fiat/Stellantis"
+                                ? [
+                                    const DropdownMenuItem(
+                                      value: "Tipo Cross 1.0 T3",
+                                      child: Text("Tipo Cross 1.0 T3"),
+                                    )
+                                  ]
+                                : [],
+                            onChanged: selectedBrand == "Fiat/Stellantis"
+                                ? (val) {
+                                    setState(() {
+                                      selectedModel = val!;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 3. Visualizzazione condizionale: Se connesso ed è selezionata la Centralina Motore mostra la griglia, altrimenti un messaggio di attesa
             Expanded(
-              child: selectedEcu == "Centralina Motore (ECU)"
+              child: (isConnected && selectedEcu == "Centralina Motore (ECU)")
                   ? GridView.count(
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
@@ -686,101 +763,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     )
-                  : ListView(
-                      children: [
-                        // Riquadro per la scelta del Marchio
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF161A1D),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                "Marca Auto",
-                                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<String>(
-                                value: selectedBrand,
-                                dropdownColor: const Color(0xFF161A1D),
-                                style: const TextStyle(color: Colors.white, fontSize: 16),
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: const Color(0xFF0E1113),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                items: brandList.map((brand) {
-                                  return DropdownMenuItem(
-                                    value: brand,
-                                    child: Text(brand),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    selectedBrand = val!;
-                                    if (selectedBrand == "Fiat/Stellantis") {
-                                      selectedModel = "Tipo Cross 1.0 T3";
-                                    } else {
-                                      selectedModel = ""; // Vuoto per Alfa Romeo
-                                    }
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
+                  : Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161A1D),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
                         ),
-                        const SizedBox(height: 12),
-
-                        // Riquadro per la scelta del Modello
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF161A1D),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.5),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                "Modello Auto",
-                                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<String>(
-                                value: selectedModel.isEmpty ? null : selectedModel,
-                                hint: const Text("Nessun modello disponibile", style: TextStyle(color: Colors.grey)),
-                                dropdownColor: const Color(0xFF161A1D),
-                                style: const TextStyle(color: Colors.white, fontSize: 16),
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: const Color(0xFF0E1113),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                items: selectedBrand == "Fiat/Stellantis"
-                                    ? [
-                                        const DropdownMenuItem(
-                                          value: "Tipo Cross 1.0 T3",
-                                          child: Text("Tipo Cross 1.0 T3"),
-                                        )
-                                      ]
-                                    : [], // Vuoto per Alfa Romeo
-                                onChanged: selectedBrand == "Fiat/Stellantis"
-                                    ? (val) {
-                                        setState(() {
-                                          selectedModel = val!;
-                                        });
-                                      }
-                                    : null,
-                              ),
-                            ],
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
+                            const SizedBox(height: 12),
+                            Text(
+                              !isConnected
+                                  ? "Connetti l'adattatore Bluetooth e seleziona la Centralina Motore."
+                                  : "Centralina selezionata: $selectedEcu.\n(I parametri del motore compaiono solo con ECU Motore connessa)",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
             ),
           ],
