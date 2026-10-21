@@ -35,8 +35,8 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   BluetoothConnection? connection;
   bool isConnecting = false;
-  bool isConnected = false;
-  String statusMessage = "Disconnesso";
+  bool isConnected = false; // Indica se il vLinker Bluetooth è connesso
+  String statusMessage = "Adattatore disconnesso";
   String selectedEcu = "Centralina Motore (ECU)";
 
   // Valori dei parametri
@@ -46,7 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String batteryVal = "---";
   String coolantVal = "---";
   String oilVal = "---";
-  String iatVal = "---"; // Temperatura Aria Aspirata
+  String iatVal = "---";
 
   Timer? _obdTimer;
 
@@ -110,9 +110,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isConnected = true;
         isConnecting = false;
-        statusMessage = "Connesso";
+        statusMessage = "vLinker connesso via Bluetooth";
       });
 
+      // Inizializzazione standard ELM327
       await sendCommand("ATZ\r");
       await Future.delayed(const Duration(milliseconds: 250));
       await sendCommand("ATE0\r");
@@ -126,7 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isConnecting = false;
         isConnected = false;
-        statusMessage = "Errore di connessione";
+        statusMessage = "Errore di connessione vLinker";
       });
     }
   }
@@ -144,13 +145,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         timer.cancel();
         return;
       }
+      
+      // Eseguiamo il polling solo se è selezionata la Centralina Motore (per ora i PID standard)
+      if (selectedEcu != "Centralina Motore (ECU)") {
+        return; 
+      }
+
       try {
         String rpm = await queryPid("010C\r");
         String speed = await queryPid("010D\r");
         String turbo = await queryPid("010B\r");
         String coolant = await queryPid("0105\r");
         String oil = await queryPid("015C\r");
-        String iat = await queryPid("010F\r"); // Richiesta Temp. Aria Aspirata
+        String iat = await queryPid("010F\r");
         
         await sendCommand("ATRV\r");
         String battery = await readResponse();
@@ -285,7 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(16),
-          height: 400,
+          height: 450,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -296,6 +303,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Scegli quale centralina interrogare tramite il vLinker:",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 12),
               Expanded(
@@ -317,6 +329,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         setState(() {
                           selectedEcu = ecu;
+                          // Se non siamo connessi al motore, azzeriamo i valori visivi
+                          if (selectedEcu != "Centralina Motore (ECU)") {
+                            rpmVal = "---";
+                            speedVal = "---";
+                            turboVal = "---";
+                            coolantVal = "---";
+                            oilVal = "---";
+                            iatVal = "---";
+                          }
                         });
                         Navigator.pop(context);
                       },
@@ -418,7 +439,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               onPressed: _showEcuSelector,
-              icon: const Icon(Icons.bluetooth_connected, size: 18),
+              icon: const Icon(Icons.settings_input_component, size: 18),
               label: const Text(
                 "SELEZIONA ECU",
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -431,6 +452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
+            // Box di Stato / Connessione a due livelli (Bluetooth + ECU)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -445,24 +467,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        isConnected ? Icons.check_circle : Icons.info_outline,
+                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
                         color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        "Stato: ${isConnected ? 'Connesso' : statusMessage}",
+                        "Adattatore vLinker: ${isConnected ? 'Connesso' : statusMessage}",
                         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Centralina: $selectedEcu (${isConnected ? 'Pronta' : 'In attesa'})",
-                    style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 12),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.memory, color: Color(0xFFFFB74D), size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        "Centralina Target: $selectedEcu",
+                        style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                   if (!isConnected) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFFB74D),
@@ -472,7 +501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       onPressed: isConnecting ? null : connectToDevice,
                       child: Text(
-                        isConnecting ? "Connessione in corso..." : "Connetti vLinker MC+",
+                        isConnecting ? "Connessione in corso..." : "Connetti Adattatore vLinker MC+",
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                     ),
@@ -481,6 +510,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Griglia dei parametri
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
