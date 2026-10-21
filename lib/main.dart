@@ -40,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String statusMessage = "Disconnesso";
   String selectedEcu = "Nessuna";
   String connectedDeviceName = "";
+  String ecuResponseInfo = "Nessuna ECU interrogata";
 
   String selectedBrand = "Fiat/Stellantis";
   String selectedModel = "Tipo Cross 1.0 T3";
@@ -54,6 +55,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String catalystVal = "---";
 
   Timer? _obdTimer;
+  StreamSubscription<Uint8List>? _bluetoothSubscription;
+  String _buffer = "";
 
   final List<String> ecuList = [
     "Centralina Motore (ECU)",
@@ -79,6 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _obdTimer?.cancel();
+    _bluetoothSubscription?.cancel();
     connection?.dispose();
     super.dispose();
   }
@@ -190,12 +194,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         statusMessage = "Bluetooth Connesso";
       });
 
+      // Ascolto continuo dello stream Bluetooth per accumulare i dati nel buffer
+      _bluetoothSubscription = connection!.input!.listen((data) {
+        _buffer += String.fromCharCodes(data);
+      });
+
+      // Inizializzazione standard ELM327
       await sendCommand("ATZ\r");
-      await Future.delayed(const Duration(milliseconds: 250));
+      await Future.delayed(const Duration(milliseconds: 300));
       await sendCommand("ATE0\r");
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 150));
       await sendCommand("ATSP0\r");
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 150));
 
     } catch (e) {
       setState(() {
@@ -208,6 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectBluetooth() {
     _obdTimer?.cancel();
+    _bluetoothSubscription?.cancel();
     connection?.dispose();
     setState(() {
       isConnected = false;
@@ -215,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       selectedEcu = "Nessuna";
       statusMessage = "Disconnesso";
       connectedDeviceName = "";
+      ecuResponseInfo = "Nessuna ECU interrogata";
     });
   }
 
@@ -223,6 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
+      ecuResponseInfo = "ECU disconnessa";
     });
   }
 
@@ -233,54 +246,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Funzione robusta per inviare un comando e attendere la risposta completa dall'ELM327 (fino al carattere '>')
+  Future<String> queryObdCommand(String cmd, {int timeoutMs = 400}) async {
+    if (connection == null || !connection!.isConnected) return "";
+    
+    _buffer = "";
+    connection!.output.add(Uint8List.fromList(cmd.codeUnits));
+    await connection!.output.allSent;
+
+    Stopwatch stopwatch = Stopwatch()..start();
+    while (stopwatch.elapsedMilliseconds < timeoutMs) {
+      if (_buffer.contains('>')) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 20));
+    }
+
+    String response = _buffer;
+    _buffer = "";
+    return response.trim();
+  }
+
+  void connectToSelectedEcu(String ecuName) async {
+    setState(() {
+      selectedEcu = ecuName;
+      isEcuConnected = true;
+      ecuResponseInfo = "Connessione in corso a $selectedEcu...";
+    });
+
+    if (selectedEcu == "Centralina Motore (ECU)") {
+      // Test di risposta rapida per conferma connessione ECU Motore
+      String testResp = await queryObdCommand("0100\r", timeoutMs: 800);
+      setState(() {
+        ecuResponseInfo = testResp.isNotEmpty 
+            ? "ECU Motore Connessa (Risposta: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')})" 
+            : "Connesso a ECU Motore (Nessuna risposta al test PID 0100)";
+      });
+      startObdLoop();
+    } else {
+      // Per le altre centraline, inviamo un comando UDS/ISO standard di test o mostriamo la conferma
+      String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
+      setState(() {
+        ecuResponseInfo = "Connesso a $selectedEcu\nRisposta ECU: ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ') : 'Pronta'}";
+      });
+    }
+  }
+
   void startObdLoop() {
-    _obdTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) async {
+    _obdTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
       if (!isEcuConnected || connection == null || selectedEcu != "Centralina Motore (ECU)") {
         timer.cancel();
         return;
       }
 
       try {
-        String rpm = await queryPid("010C\r");
-        String speed = await queryPid("010D\r");
-        String turbo = await queryPid("010B\r");
-        String coolant = await queryPid("0105\r");
-        String oil = await queryPid("015C\r");
-        String iat = await queryPid("010F\r");
-        String catalyst = await queryPid("013C\r");
-        
-        await sendCommand("ATRV\r");
-        String battery = await readResponse();
+        String rpmResp = await queryObdCommand("010C\r");
+        String speedResp = await queryObdCommand("010D\r");
+        String turboResp = await queryObdCommand("010B\r");
+        String coolantResp = await queryObdCommand("0105\r");
+        String oilResp = await queryObdCommand("015C\r");
+        String iatResp = await queryObdCommand("010F\r");
+        String catalystResp = await queryObdCommand("013C\r");
+        String batteryResp = await queryObdCommand("ATRV\r");
 
         if (mounted) {
           setState(() {
-            rpmVal = parseRpm(rpm);
-            speedVal = parseSpeed(speed);
-            turboVal = parseTurbo(turbo);
-            coolantVal = parseCoolant(coolant);
-            oilVal = parseOil(oil);
-            iatVal = parseIat(iat);
-            catalystVal = parseCatalyst(catalyst);
-            batteryVal = parseBattery(battery);
+            rpmVal = parseRpm(rpmResp);
+            speedVal = parseSpeed(speedResp);
+            turboVal = parseTurbo(turboResp);
+            coolantVal = parseCoolant(coolantResp);
+            oilVal = parseOil(oilResp);
+            iatVal = parseIat(iatResp);
+            catalystVal = parseCatalyst(catalystResp);
+            batteryVal = parseBattery(batteryResp);
           });
         }
       } catch (_) {}
     });
-  }
-
-  Future<String> queryPid(String cmd) async {
-    if (connection == null || !connection!.isConnected) return "";
-    connection!.output.add(Uint8List.fromList(cmd.codeUnits));
-    await connection!.output.allSent;
-    return await readResponse();
-  }
-
-  Future<String> readResponse() async {
-    List<int> data = await connection!.input!.first.timeout(
-      const Duration(milliseconds: 250),
-      onTimeout: () => Uint8List(0),
-    );
-    return String.fromCharCodes(data);
   }
 
   String parseRpm(String resp) {
@@ -381,8 +423,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String parseBattery(String resp) {
     try {
       final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
-      if (clean.isNotEmpty) {
-        return double.parse(clean).toStringAsFixed(1);
+      // Estrae il valore numerico della tensione dalla risposta ATRV
+      final match = RegExp(r'(\d+\.\d+)').firstMatch(clean);
+      if (match != null) {
+        return double.parse(match.group(1)! ).toStringAsFixed(1);
       }
     } catch (_) {}
     return batteryVal;
@@ -440,15 +484,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ? const Icon(Icons.check, color: Color(0xFFFFB74D))
                           : null,
                       onTap: () {
-                        setState(() {
-                          selectedEcu = ecu;
-                          isEcuConnected = true;
-                        });
                         Navigator.pop(context);
-                        
-                        if (selectedEcu == "Centralina Motore (ECU)") {
-                          startObdLoop();
-                        }
+                        connectToSelectedEcu(ecu);
                       },
                     );
                   },
@@ -795,6 +832,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   : Center(
                       child: Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: const Color(0xFF161A1D),
@@ -808,7 +846,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                             Text(
                               isEcuConnected
-                                  ? "Connesso a: $selectedEcu\n(Nessun parametro da visualizzare per questa centralina)"
+                                  ? "Connesso a: $selectedEcu\n\n[Conferma Connessione ECU]\n$ecuResponseInfo"
                                   : "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.grey, fontSize: 13),
