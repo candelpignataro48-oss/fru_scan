@@ -35,9 +35,10 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   BluetoothConnection? connection;
   bool isConnecting = false;
-  bool isConnected = false; // Indica se il vLinker Bluetooth è connesso
-  String statusMessage = "Adattatore disconnesso";
+  bool isConnected = false;
+  String statusMessage = "Disconnesso";
   String selectedEcu = "Centralina Motore (ECU)";
+  String connectedDeviceName = "";
 
   // Valori dei parametri
   String rpmVal = "---";
@@ -82,7 +83,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ].request();
   }
 
-  void connectToDevice() async {
+  // Mostra il popup con tutti i dispositivi Bluetooth associati
+  void _showBluetoothDeviceSelector() async {
     setState(() {
       isConnecting = true;
       statusMessage = "Richiesta permessi...";
@@ -91,29 +93,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await requestPermissions();
 
     setState(() {
-      statusMessage = "Ricerca vLinker MC+...";
+      statusMessage = "Lettura dispositivi associati...";
     });
 
     try {
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
-      BluetoothDevice vlinker = devices.firstWhere(
-        (d) => (d.name ?? "").toUpperCase().contains("VLINKER") || (d.name ?? "").toUpperCase().contains("OBD"),
-        orElse: () => devices.first,
-      );
-
+      
       setState(() {
-        statusMessage = "Connessione a ${vlinker.name ?? vlinker.address}...";
+        isConnecting = false;
+        statusMessage = "Seleziona interfaccia";
       });
 
-      connection = await BluetoothConnection.toAddress(vlinker.address);
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF161A1D),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              "Dispositivi Bluetooth Associati",
+              style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: devices.isEmpty
+                  ? const Center(
+                      child: Text(
+                        "Nessun dispositivo associato trovato.\nAssocia l'interfaccia nelle impostazioni Bluetooth del telefono.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: devices.length,
+                      itemBuilder: (context, index) {
+                        BluetoothDevice device = devices[index];
+                        return ListTile(
+                          leading: const Icon(Icons.bluetooth, color: Color(0xFFFFB74D)),
+                          title: Text(
+                            device.name ?? "Dispositivo Senza Nome",
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            device.address,
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            connectToDevice(device);
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Annulla", style: TextStyle(color: Colors.grey)),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      setState(() {
+        isConnecting = false;
+        statusMessage = "Errore scansione Bluetooth";
+      });
+    }
+  }
+
+  // Connessione al dispositivo scelto dall'utente
+  void connectToDevice(BluetoothDevice device) async {
+    setState(() {
+      isConnecting = true;
+      statusMessage = "Connessione a ${device.name ?? device.address}...";
+    });
+
+    try {
+      connection = await BluetoothConnection.toAddress(device.address);
       
       setState(() {
         isConnected = true;
         isConnecting = false;
-        statusMessage = "vLinker connesso via Bluetooth";
+        connectedDeviceName = device.name ?? device.address;
+        statusMessage = "Connesso";
       });
 
-      // Inizializzazione standard ELM327
+      // Inizializzazione ELM327
       await sendCommand("ATZ\r");
       await Future.delayed(const Duration(milliseconds: 250));
       await sendCommand("ATE0\r");
@@ -127,7 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isConnecting = false;
         isConnected = false;
-        statusMessage = "Errore di connessione vLinker";
+        statusMessage = "Errore di connessione";
       });
     }
   }
@@ -146,7 +216,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       
-      // Eseguiamo il polling solo se è selezionata la Centralina Motore (per ora i PID standard)
       if (selectedEcu != "Centralina Motore (ECU)") {
         return; 
       }
@@ -306,7 +375,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                "Scegli quale centralina interrogare tramite il vLinker:",
+                "Scegli quale centralina interrogare:",
                 style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 12),
@@ -329,7 +398,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         setState(() {
                           selectedEcu = ecu;
-                          // Se non siamo connessi al motore, azzeriamo i valori visivi
                           if (selectedEcu != "Centralina Motore (ECU)") {
                             rpmVal = "---";
                             speedVal = "---";
@@ -427,32 +495,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFFFB74D),
-                side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: _showEcuSelector,
-              icon: const Icon(Icons.settings_input_component, size: 18),
-              label: const Text(
-                "SELEZIONA ECU",
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
+        centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Box di Stato / Connessione a due livelli (Bluetooth + ECU)
+            // 1. Box principale con le funzioni di Stato, Centralina (ECU) e Connessione Bluetooth manuale
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -473,7 +522,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        "Adattatore vLinker: ${isConnected ? 'Connesso' : statusMessage}",
+                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
                         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -490,22 +539,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-                  if (!isConnected) ...[
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFB74D),
-                        foregroundColor: Colors.black,
-                        minimumSize: const Size.fromHeight(36),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  const SizedBox(height: 12),
+                  
+                  // Pulsante SELEZIONA ECU e Pulsante Connessione Bluetooth affiancati o a tutto schermo
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFFFB74D),
+                            side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: _showEcuSelector,
+                          icon: const Icon(Icons.settings_input_component, size: 16),
+                          label: const Text(
+                            "SELEZIONA ECU",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ),
-                      onPressed: isConnecting ? null : connectToDevice,
-                      child: Text(
-                        isConnecting ? "Connessione in corso..." : "Connetti Adattatore vLinker MC+",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
+                            foregroundColor: isConnected ? Colors.white : Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: isConnecting
+                              ? null
+                              : (isConnected
+                                  ? () {
+                                      connection?.dispose();
+                                      setState(() {
+                                        isConnected = false;
+                                        statusMessage = "Disconnesso";
+                                      });
+                                    }
+                                  : _showBluetoothDeviceSelector),
+                          child: Text(
+                            isConnecting
+                                ? "Connessione..."
+                                : (isConnected ? "Disconnetti" : "Scegli Bluetooth"),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
                       ),
-                    ),
-                  ]
+                    ],
+                  ),
                 ],
               ),
             ),
