@@ -17,8 +17,8 @@ class FruScanApp extends StatelessWidget {
       title: 'Fru Scan',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF090B0E),
-        primaryColor: const Color(0xFF00F2FE),
+        scaffoldBackgroundColor: const Color(0xFF0E1113),
+        primaryColor: const Color(0xFFFFB74D),
       ),
       home: const DashboardScreen(),
     );
@@ -37,12 +37,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isConnecting = false;
   bool isConnected = false;
   String statusMessage = "Disconnesso";
+  String selectedEcu = "Centralina Motore (ECU)";
 
-  String rpmVal = "0";
-  String tempVal = "-";
-  String turboVal = "-";
+  // Valori dei parametri
+  String rpmVal = "---";
+  String speedVal = "---";
+  String turboVal = "---";
+  String batteryVal = "---";
+  String coolantVal = "---";
+  String oilVal = "---";
 
   Timer? _obdTimer;
+
+  final List<String> ecuList = [
+    "Centralina Motore (ECU)",
+    "Body Computer",
+    "Quadro Strumenti",
+    "Sensori di Parcheggio",
+    "Servosterzo",
+    "Cruise Control",
+    "Climatizzatore",
+    "Radio",
+    "ABS",
+    "Airbag",
+    "Blind Spot",
+    "Telecamere",
+    "Radar",
+  ];
 
   @override
   void dispose() {
@@ -88,7 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isConnected = true;
         isConnecting = false;
-        statusMessage = "Connesso alla Fiat Tipo T3";
+        statusMessage = "Connesso";
       });
 
       await sendCommand("ATZ\r");
@@ -117,21 +138,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void startObdLoop() {
-    _obdTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
+    _obdTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) async {
       if (!isConnected || connection == null) {
         timer.cancel();
         return;
       }
       try {
+        // Interrogazione PID standard OBD2
         String rpm = await queryPid("010C\r");
-        String temp = await queryPid("0105\r");
+        String speed = await queryPid("010D\r");
         String turbo = await queryPid("010B\r");
+        String coolant = await queryPid("0105\r");
+        String oil = await queryPid("015C\r");
+        
+        // Tensione batteria tramite comando ELM327 AT RV
+        await sendCommand("ATRV\r");
+        String battery = await readResponse();
 
         if (mounted) {
           setState(() {
             rpmVal = parseRpm(rpm);
-            tempVal = parseTemp(temp);
+            speedVal = parseSpeed(speed);
             turboVal = parseTurbo(turbo);
+            coolantVal = parseCoolant(coolant);
+            oilVal = parseOil(oil);
+            batteryVal = parseBattery(battery);
           });
         }
       } catch (_) {}
@@ -142,7 +173,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (connection == null || !connection!.isConnected) return "";
     connection!.output.add(Uint8List.fromList(cmd.codeUnits));
     await connection!.output.allSent;
+    return await readResponse();
+  }
 
+  Future<String> readResponse() async {
     List<int> data = await connection!.input!.first.timeout(
       const Duration(milliseconds: 250),
       onTimeout: () => Uint8List(0),
@@ -164,17 +198,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return rpmVal;
   }
 
-  String parseTemp(String resp) {
+  String parseSpeed(String resp) {
     try {
       final clean = resp.replaceAll(">", "").trim();
       final parts = clean.split(RegExp(r'\s+'));
-      int idx = parts.indexOf("05");
+      int idx = parts.indexOf("0D");
       if (idx != -1 && parts.length > idx + 1) {
         int a = int.parse(parts[idx + 1], radix: 16);
-        return (a - 40).toString();
+        return a.toString();
       }
     } catch (_) {}
-    return tempVal;
+    return speedVal;
   }
 
   String parseTurbo(String resp) {
@@ -191,51 +225,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return turboVal;
   }
 
+  String parseCoolant(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("05");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return coolantVal;
+  }
+
+  String parseOil(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("5C");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return oilVal;
+  }
+
+  String parseBattery(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").replaceAll("V", "").trim();
+      if (clean.isNotEmpty) {
+        return double.parse(clean).toStringAsFixed(1);
+      }
+    } catch (_) {}
+    return batteryVal;
+  }
+
+  void _showEcuSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161A1D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          height: 400,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Seleziona Centralina (ECU)",
+                style: TextStyle(
+                  color: Color(0xFFFFB74D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: ecuList.length,
+                  itemBuilder: (context, index) {
+                    final ecu = ecuList[index];
+                    return ListTile(
+                      title: Text(
+                        ecu,
+                        style: TextStyle(
+                          color: selectedEcu == ecu ? const Color(0xFFFFB74D) : Colors.white,
+                          fontWeight: selectedEcu == ecu ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: selectedEcu == ecu
+                          ? const Icon(Icons.check, color: Color(0xFFFFB74D))
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          selectedEcu = ecu;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget buildMetricCard({
     required IconData icon,
     required String title,
     required String value,
     required String unit,
+    required Color borderColor,
     required Color accentColor,
   }) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF131720),
+        color: const Color(0xFF161A1D),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: accentColor.withOpacity(0.3),
-          width: 1.2,
+          color: borderColor.withOpacity(0.6),
+          width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: accentColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFF8B95A5),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
+          Icon(icon, color: accentColor, size: 28),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -245,18 +358,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 value,
                 style: TextStyle(
                   color: accentColor,
-                  fontSize: 42,
+                  fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Text(
                 unit,
                 style: TextStyle(
-                  color: accentColor.withOpacity(0.8),
+                  color: accentColor,
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
@@ -271,98 +383,147 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'FRU SCAN // T3',
+          'FRU SCAN',
           style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.0,
-            color: Color(0xFF00F2FE),
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: Color(0xFFFFB74D),
           ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12.0),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFFFB74D),
+                side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: _showEcuSelector,
+              icon: const Icon(Icons.bluetooth_connected, size: 18),
+              label: const Text(
+                "SELEZIONA ECU",
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Pulsante di connessione sportivo
-            SizedBox(
+            // Box di Stato / Connessione
+            Container(
               width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isConnected ? const Color(0xFF00C853) : const Color(0xFF131720),
-                  foregroundColor: Colors.white,
-                  side: BorderSide(
-                    color: isConnected ? const Color(0xFF00C853) : const Color(0xFF00F2FE).withOpacity(0.5),
-                    width: 1.5,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 4,
-                ),
-                onPressed: isConnecting ? null : connectToDevice,
-                child: Text(
-                  isConnecting ? "CONNESSIONE IN CORSO..." : (isConnected ? "SISTEMA CONNESSO" : "CONNETTI VLINKER"),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              statusMessage.toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF626F84),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.0,
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Riquadro Principale: Giri Motore (RPM)
-            Expanded(
-              flex: 5,
-              child: buildMetricCard(
-                icon: Icons.speed_rounded,
-                title: "Giri Motore",
-                value: rpmVal,
-                unit: "rpm",
-                accentColor: const Color(0xFF00F2FE),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Riquadri Secondari: Temperatura e Pressione Turbina
-            Expanded(
-              flex: 5,
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: buildMetricCard(
-                      icon: Icons.thermostat_rounded,
-                      title: "Temperatura",
-                      value: tempVal,
-                      unit: "°C",
-                      accentColor: const Color(0xFFFF9100),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isConnected ? Icons.check_circle : Icons.info_outline,
+                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "Stato: ${isConnected ? 'Connesso' : statusMessage}",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: buildMetricCard(
-                      icon: Icons.compress_rounded,
-                      title: "Turbina",
-                      value: turboVal,
-                      unit: "bar",
-                      accentColor: const Color(0xFF00E676),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Centralina: $selectedEcu (${isConnected ? 'Pronta' : 'In attesa'})",
+                    style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 12),
+                  ),
+                  if (!isConnected) ...[
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFFB74D),
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size.fromHeight(36),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: isConnecting ? null : connectToDevice,
+                      child: Text(
+                        isConnecting ? "Connessione in corso..." : "Connetti vLinker MC+",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
                     ),
+                  ]
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Griglia dei parametri
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.35,
+                children: [
+                  buildMetricCard(
+                    icon: Icons.speed,
+                    title: "Giri Motore",
+                    value: rpmVal,
+                    unit: "RPM",
+                    borderColor: Colors.orangeAccent,
+                    accentColor: Colors.orangeAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.directions_car,
+                    title: "Velocità",
+                    value: speedVal,
+                    unit: "km/h",
+                    borderColor: Colors.greenAccent,
+                    accentColor: Colors.greenAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.compress,
+                    title: "Pressione Turbina",
+                    value: turboVal,
+                    unit: "bar",
+                    borderColor: Colors.cyanAccent,
+                    accentColor: Colors.cyanAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.bolt,
+                    title: "Tensione Batteria",
+                    value: batteryVal,
+                    unit: "V",
+                    borderColor: Colors.purpleAccent,
+                    accentColor: Colors.purpleAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.thermostat,
+                    title: "Temp. Refrigerante",
+                    value: coolantVal,
+                    unit: "°C",
+                    borderColor: Colors.blueAccent,
+                    accentColor: Colors.blueAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.water_drop,
+                    title: "Temp. Olio",
+                    value: oilVal,
+                    unit: "°C",
+                    borderColor: Colors.amber,
+                    accentColor: Colors.amber,
                   ),
                 ],
               ),
