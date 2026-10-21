@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial.dart';
+import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 void main() {
@@ -73,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
-      BluetoothDevice? vlinker = devices.firstWhere(
+      BluetoothDevice vlinker = devices.firstWhere(
         (d) => (d.name ?? "").toUpperCase().contains("VLINKER") || (d.name ?? "").toUpperCase().contains("OBD"),
         orElse: () => devices.first,
       );
@@ -142,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     connection!.output.add(Uint8List.fromList(cmd.codeUnits));
     await connection!.output.allSent;
 
-    List<int> data = await connection!.input.first.timeout(const Duration(milliseconds: 250), onTimeout: () => []);
+    List<int> data = await connection!.input!.first.timeout(const Duration(milliseconds: 250), onTimeout: () => []);
     return String.fromCharCodes(data);
   }
 
@@ -270,4 +270,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-
