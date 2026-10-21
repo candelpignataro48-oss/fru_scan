@@ -465,4 +465,194 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 4
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'FRU SCAN',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: Color(0xFFFFB74D),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            // Box principale con Stato Bluetooth e i due pulsanti (Scegli Bluetooth a sinistra, SELEZIONA ECU a destra)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                        color: isConnected ? Colors.greenAccent : Colors.orangeAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Pulsanti: Scegli Bluetooth a sinistra, SELEZIONA ECU a destra
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
+                            foregroundColor: isConnected ? Colors.white : Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: isConnecting
+                              ? null
+                              : (isConnected
+                                  ? () {
+                                      connection?.dispose();
+                                      setState(() {
+                                        isConnected = false;
+                                        statusMessage = "Disconnesso";
+                                      });
+                                    }
+                                  : _showBluetoothDeviceSelector),
+                          child: Text(
+                            isConnecting
+                                ? "Connessione..."
+                                : (isConnected ? "Disconnetti" : "Scegli Bluetooth"),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFFFB74D),
+                            side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: _showEcuSelector,
+                          icon: const Icon(Icons.settings_input_component, size: 16),
+                          label: const Text(
+                            "SELEZIONA ECU",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Griglia dei parametri
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.35,
+                children: [
+                  buildMetricCard(
+                    icon: Icons.speed,
+                    title: "Giri Motore",
+                    value: rpmVal,
+                    unit: "RPM",
+                    borderColor: Colors.orangeAccent,
+                    accentColor: Colors.orangeAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.directions_car,
+                    title: "Velocità",
+                    value: speedVal,
+                    unit: "km/h",
+                    borderColor: Colors.greenAccent,
+                    accentColor: Colors.greenAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.compress,
+                    title: "Pressione Turbina",
+                    value: turboVal,
+                    unit: "bar",
+                    borderColor: Colors.cyanAccent,
+                    accentColor: Colors.cyanAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.bolt,
+                    title: "Tensione Batteria",
+                    value: batteryVal,
+                    unit: "V",
+                    borderColor: Colors.purpleAccent,
+                    accentColor: Colors.purpleAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.thermostat,
+                    title: "Temp. Refrigerante",
+                    value: coolantVal,
+                    unit: "°C",
+                    borderColor: Colors.blueAccent,
+                    accentColor: Colors.blueAccent,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.water_drop,
+                    title: "Temp. Olio",
+                    value: oilVal,
+                    unit: "°C",
+                    borderColor: Colors.amber,
+                    accentColor: Colors.amber,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.air,
+                    title: "Temp. Aria Aspirata",
+                    value: iatVal,
+                    unit: "°C",
+                    borderColor: Colors.tealAccent,
+                    accentColor: Colors.tealAccent,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
