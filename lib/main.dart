@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   runApp(const FruScanApp());
@@ -85,7 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _obdTimer?.cancel();
     _bluetoothSubscription?.cancel();
     connection?.dispose();
-    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -220,7 +218,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _obdTimer?.cancel();
     _bluetoothSubscription?.cancel();
     connection?.dispose();
-    WakelockPlus.disable();
     setState(() {
       isConnected = false;
       isEcuConnected = false;
@@ -233,7 +230,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void disconnectEcu() {
     _obdTimer?.cancel();
-    WakelockPlus.disable();
     setState(() {
       isEcuConnected = false;
       selectedEcu = "Nessuna";
@@ -282,14 +278,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? "Risposta ECU Motore: ${testResp.replaceAll('\r', ' ').replaceAll('\n', ' ')}" 
             : "ECU Motore Connessa (Pronta)";
       });
-      WakelockPlus.enable();
       startObdLoop();
     } else {
       String testResp = await queryObdCommand("10 03\r", timeoutMs: 600);
       setState(() {
         ecuResponseInfo = "Risposta ECU ($selectedEcu): ${testResp.isNotEmpty ? testResp.replaceAll('\r', ' ').replaceAll('\n', ' ') : 'Pronta'}";
       });
-      WakelockPlus.enable();
     }
   }
 
