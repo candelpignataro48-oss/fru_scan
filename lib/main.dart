@@ -46,6 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String batteryVal = "---";
   String coolantVal = "---";
   String oilVal = "---";
+  String iatVal = "---"; // Temperatura Aria Aspirata
 
   Timer? _obdTimer;
 
@@ -144,14 +145,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       try {
-        // Interrogazione PID standard OBD2
         String rpm = await queryPid("010C\r");
         String speed = await queryPid("010D\r");
         String turbo = await queryPid("010B\r");
         String coolant = await queryPid("0105\r");
         String oil = await queryPid("015C\r");
+        String iat = await queryPid("010F\r"); // Richiesta Temp. Aria Aspirata
         
-        // Tensione batteria tramite comando ELM327 AT RV
         await sendCommand("ATRV\r");
         String battery = await readResponse();
 
@@ -162,6 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             turboVal = parseTurbo(turbo);
             coolantVal = parseCoolant(coolant);
             oilVal = parseOil(oil);
+            iatVal = parseIat(iat);
             batteryVal = parseBattery(battery);
           });
         }
@@ -249,6 +250,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
     return oilVal;
+  }
+
+  String parseIat(String resp) {
+    try {
+      final clean = resp.replaceAll(">", "").trim();
+      final parts = clean.split(RegExp(r'\s+'));
+      int idx = parts.indexOf("0F");
+      if (idx != -1 && parts.length > idx + 1) {
+        int a = int.parse(parts[idx + 1], radix: 16);
+        return (a - 40).toString();
+      }
+    } catch (_) {}
+    return iatVal;
   }
 
   String parseBattery(String resp) {
@@ -417,7 +431,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Box di Stato / Connessione
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -468,8 +481,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Griglia dei parametri
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -524,6 +535,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     unit: "°C",
                     borderColor: Colors.amber,
                     accentColor: Colors.amber,
+                  ),
+                  buildMetricCard(
+                    icon: Icons.air,
+                    title: "Temp. Aria Aspirata",
+                    value: iatVal,
+                    unit: "°C",
+                    borderColor: Colors.tealAccent,
+                    accentColor: Colors.tealAccent,
                   ),
                 ],
               ),
