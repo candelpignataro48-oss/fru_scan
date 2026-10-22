@@ -107,7 +107,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
    setState(() { isConnecting = false; isConnected = false; statusMessage = "Errore di connessione"; });
   }
  }
-
  void disconnectBluetooth() {
   _obdTimer?.cancel(); _busy = false; _btSub?.cancel(); connection?.dispose();
   setState(() { isConnected = false; isEcuConnected = false; selectedEcu = "Nessuna"; statusMessage = "Disconnesso"; connectedDeviceName = ""; ecuResponseInfo = "Nessuna ECU interrogata"; });
@@ -188,6 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
    }
   }
  }
+
  void connectToSelectedEcu(String ecuName) async {
   _obdTimer?.cancel(); _busy = false; _tick = 0;
   String id = ecuIds[ecuName] ?? "10";
@@ -221,7 +221,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   return null;
  }
-
  Future<void> _updateShared(String curId) async {
   List<int> fB = _bytes(await queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
   if (fB.isNotEmpty && fB[0] > 0 && fB[0] <= 100) {
@@ -295,12 +294,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       List<int> cB = _bytes(await queryObd("013C\r", timeoutMs: 140), "41", "3C");
       if (cB.length >= 2) catalystVal = (((cB[0] * 256) + cB[1]) / 10.0 - 40.0).round().toString();
-      batteryVal = parseVolt(await queryObd("ATATR", timeoutMs: 120)); // ATRV
       batteryVal = parseVolt(await queryObd("ATRV\r", timeoutMs: 120));
       await _updateShared("10");
       await _updateDtc(isEng: true);
 
-      // Lettura nativa UDS FCA per Vita Restante Olio (corretta e allineata con AlfaOBD)
+      // Lettura nativa UDS FCA per Vita Olio (AlfaOBD compatible)
       bool foundOil = false;
       for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "03"], ["38", "1A"]]) {
        List<int> b = _bytes(await queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
@@ -308,17 +306,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         int v = -1;
         if (b.length >= 2) {
          int raw16 = (b[0] * 256) + b[1];
-         if (raw16 <= 100) v = raw16;
-         else if (raw16 <= 1000) v = raw16 ~/ 10;
-         else if (raw16 <= 10000) v = raw16 ~/ 100;
+         if (raw16 >= 0 && raw16 <= 100) v = raw16;
+         else if (raw16 > 100 && raw16 <= 1000) v = raw16 ~/ 10;
+         else if (raw16 > 1000 && raw16 <= 10000) v = raw16 ~/ 100;
         }
-        if (v == -1 && b[0] <= 100) v = b[0];
+        if (v == -1 && b[0] >= 0 && b[0] <= 100) v = b[0];
         if (v >= 0 && v <= 100) { oilLifeVal = v.toString(); foundOil = true; break; }
        }
       }
-      if (!foundOil && _odoKm != null && _odoKm! > 0) {
-       oilLifeVal = (((15000 - (_odoKm! % 15000)) / 15000.0) * 100.0).clamp(0, 100).round().toString();
-      }
+      if (!foundOil) oilLifeVal = "---";
      }
     } else if (selectedEcu == "Body Computer") {
      bcmBatteryVoltVal = parseVolt(await queryObd("ATRV\r", timeoutMs: 120));
@@ -335,24 +331,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else if (selectedEcu == "Quadro Strumenti") {
      ipcVoltVal = parseVolt(await queryObd("ATRV\r", timeoutMs: 120));
      
-     // Lettura Service nativa da Quadro Strumenti (Km e Giorni)
-     int? remSrvKm;
-     int? remSrvDays;
-     for (var d in [["20", "10"], ["20", "11"], ["F1", "C2"], ["10", "12"]]) {
-      List<int> sB = _bytes(await queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
+     // Lettura Service nativa ed effettiva da Quadro Strumenti (Km e Giorni)
+     bool foundSrv = false;
+     for (var d in [["21", "01"], ["20", "10"], ["20", "11"], ["F1", "C2"], ["19", "20"]]) {
+      List<int> sB = _bytes(await queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 150), "62", d[0], d[1]);
       if (sB.length >= 2) {
-       int v = (sB[0] * 256) + sB[1];
-       if (v > 15000 && v <= 150000) v = v ~/ 10;
-       if (v > 0 && v <= 30000) { remSrvKm = v; break; }
+       int kmVal = -1;
+       int? daysVal;
+       
+       // Decodifica nativa FCA Service (Km rimanenti diretti)
+       int rawWord = (sB[0] * 256) + sB[1];
+       if (rawWord <= 15000) {
+        kmVal = rawWord;
+       } else if (rawWord > 15000 && rawWord <= 150000) {
+        kmVal = rawWord ~/ 10;
+       } else if (sB.length >= 4) {
+        int altWord = (sB[2] * 256) + sB[3];
+        if (altWord >= 0 && altWord <= 15000) kmVal = altWord;
+       }
+
+       if (kmVal >= 0 && kmVal <= 15000) {
+        if (sB.length >= 4) {
+         int dCalc = (sB[2] * 256) + sB[3];
+         if (dCalc > 15000 && dCalc <= 730) daysVal = dCalc;
+         else if (sB.length >= 6) {
+          int dAlt = (sB[4] * 256) + sB[5];
+          if (dAlt >= 0 && dAlt <= 730) daysVal = dAlt;
+         }
+        }
+        ipcServiceKmVal = daysVal != null ? "$kmVal/15000 ($daysVal gg)" : "$kmVal/15000";
+        foundSrv = true;
+        break;
+       }
       }
      }
+     if (!foundSrv) ipcServiceKmVal = "---/15000";
+
      if (_tick % 2 == 0) await _updateShared("60");
-     if (remSrvKm == null && _odoKm != null && _odoKm! > 0) {
-      remSrvKm = 15000 - (_odoKm! % 15000);
-     }
-     if (remSrvKm != null) {
-      ipcServiceKmVal = "$remSrvKm/15000";
-     }
 
      List<int> cB = _bytes(await queryObd("22 20 0A\r", timeoutMs: 140), "62", "20", "0A");
      if (cB.length >= 2) {
