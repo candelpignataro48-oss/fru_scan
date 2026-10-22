@@ -295,17 +295,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       List<int> cB = _bytes(await queryObd("013C\r", timeoutMs: 140), "41", "3C");
       if (cB.length >= 2) catalystVal = (((cB[0] * 256) + cB[1]) / 10.0 - 40.0).round().toString();
+      batteryVal = parseVolt(await queryObd("ATATR", timeoutMs: 120)); // ATRV
       batteryVal = parseVolt(await queryObd("ATRV\r", timeoutMs: 120));
       await _updateShared("10");
       await _updateDtc(isEng: true);
-      for (var d in [["19", "42"], ["18", "82"], ["18", "08"], ["38", "1A"]]) {
+
+      // Lettura nativa UDS FCA per Vita Restante Olio (corretta e allineata con AlfaOBD)
+      bool foundOil = false;
+      for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "03"], ["38", "1A"]]) {
        List<int> b = _bytes(await queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
        if (b.isNotEmpty) {
-        int v = b.length >= 2 ? ((b[0] * 256 + b[1]) > 100 ? (b[0] * 256 + b[1]) ~/ 100 : b[0]) : b[0];
-        if (v > 0 && v <= 100) { oilLifeVal = v.toString(); break; }
+        int v = -1;
+        if (b.length >= 2) {
+         int raw16 = (b[0] * 256) + b[1];
+         if (raw16 <= 100) v = raw16;
+         else if (raw16 <= 1000) v = raw16 ~/ 10;
+         else if (raw16 <= 10000) v = raw16 ~/ 100;
+        }
+        if (v == -1 && b[0] <= 100) v = b[0];
+        if (v >= 0 && v <= 100) { oilLifeVal = v.toString(); foundOil = true; break; }
        }
       }
-      if (oilLifeVal == "---" && _odoKm != null && _odoKm! > 0) {
+      if (!foundOil && _odoKm != null && _odoKm! > 0) {
        oilLifeVal = (((15000 - (_odoKm! % 15000)) / 15000.0) * 100.0).clamp(0, 100).round().toString();
       }
      }
@@ -323,16 +334,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
      if (_tick % 3 == 0) { await _updateShared("40"); await _updateDtc(); }
     } else if (selectedEcu == "Quadro Strumenti") {
      ipcVoltVal = parseVolt(await queryObd("ATRV\r", timeoutMs: 120));
-     List<int> sB = _bytes(await queryObd("22 20 10\r", timeoutMs: 140), "62", "20", "10");
-     int? remSrv;
-     if (sB.length >= 2) {
-      int v = (sB[0] * 256) + sB[1];
-      if (v > 15000) v = v ~/ 10;
-      if (v > 0 && v <= 15000) remSrv = v;
+     
+     // Lettura Service nativa da Quadro Strumenti (Km e Giorni)
+     int? remSrvKm;
+     int? remSrvDays;
+     for (var d in [["20", "10"], ["20", "11"], ["F1", "C2"], ["10", "12"]]) {
+      List<int> sB = _bytes(await queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
+      if (sB.length >= 2) {
+       int v = (sB[0] * 256) + sB[1];
+       if (v > 15000 && v <= 150000) v = v ~/ 10;
+       if (v > 0 && v <= 30000) { remSrvKm = v; break; }
+      }
      }
      if (_tick % 2 == 0) await _updateShared("60");
-     if (remSrv == null && _odoKm != null && _odoKm! > 0) remSrv = 15000 - (_odoKm! % 15000);
-     if (remSrv != null) ipcServiceKmVal = "$remSrv/15000";
+     if (remSrvKm == null && _odoKm != null && _odoKm! > 0) {
+      remSrvKm = 15000 - (_odoKm! % 15000);
+     }
+     if (remSrvKm != null) {
+      ipcServiceKmVal = "$remSrvKm/15000";
+     }
 
      List<int> cB = _bytes(await queryObd("22 20 0A\r", timeoutMs: 140), "62", "20", "0A");
      if (cB.length >= 2) {
