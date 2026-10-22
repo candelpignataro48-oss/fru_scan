@@ -1,5 +1,4 @@
-// Fru Scan - Codice Sorgente main.dart (PARTE 1 di 3)
-// Aggiornato con DID nativi FCA / AlfaOBD e gestione sincronizzazione anti-sfarfallio
+// Fru Scan - Parte 1 di 3
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -38,10 +37,9 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
   BluetoothConnection? connection;
   bool isConnecting = false;
   bool isConnected = false;
-  bool _isPolling = false; // Semaforo per bloccare sovrapposizioni di cicli di lettura
+  bool _isPolling = false;
   String selectedDeviceAddress = "";
 
-  // Variabili per i dati reali estratti da AlfaOBD
   String carburanteResiduo = "-- %";
   String kmService = "--- km";
   String giorniService = "--- giorni";
@@ -53,7 +51,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
 
   Timer? pollingTimer;
 
-  // Funzione sicura per inviare comandi UDS con configurazione CAN e Flow Control
   Future<String> sendObdCommand(String txHeader, String rxHeader, String command) async {
     if (connection == null || !isConnected) return "";
     try {
@@ -81,7 +78,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
       await connection!.output.allSent;
       await Future.delayed(const Duration(milliseconds: 20));
 
-      // Invio comando UDS effettivo
       connection!.output.add(utf8.encode("$command\r"));
       await connection!.output.allSent;
 
@@ -99,7 +95,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
       return "ERRORE: $e";
     }
   }
-  // Ciclo di polling principale ottimizzato per evitare accavallamenti e sfarfallii
   void startPolling() {
     if (pollingTimer != null && pollingTimer!.isActive) return;
 
@@ -108,7 +103,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
       _isPolling = true;
 
       try {
-        // --- 1. QUADRO STRUMENTI (18DA60F1 / 18DAF160) ---
         String respIpcCarb = await sendObdCommand("18DA60F1", "18DAF160", "22 10 04");
         String carbIpcVal = parseHexResponse(respIpcCarb, "62 10 04");
         if (carbIpcVal.isNotEmpty) {
@@ -119,13 +113,12 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Service: Odometro (22 20 01) e Distanza Ultimo Servizio (22 20 13) per calcolo km residui Service
         String respOdo = await sendObdCommand("18DA60F1", "18DAF160", "22 20 01");
         String respLastServ = await sendObdCommand("18DA60F1", "18DAF160", "22 20 13");
-        String respDaysServ = await sendObdCommand("18DA60F1", "18DAF160", "22 20 15"); // Giorni residui Service (219)
+        String respDaysServ = await sendObdCommand("18DA60F1", "18DAF160", "22 20 15");
 
         if (respOdo.contains("62 20 01") && respLastServ.contains("62 20 13")) {
-          int odoVal = extractHexValue(respOdo, "62 20 01", 4); // decimi di km
+          int odoVal = extractHexValue(respOdo, "62 20 01", 4);
           int lastServVal = extractHexValue(respLastServ, "62 20 13", 3);
           if (odoVal > 0 && lastServVal > 0) {
             int currentKm = (odoVal / 10).round();
@@ -142,7 +135,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Temperatura Esterna da IPC (22 10 05)
         String respTempExt = await sendObdCommand("18DA60F1", "18DAF160", "22 10 05");
         String tempExtHex = parseHexResponse(respTempExt, "62 10 05");
         if (tempExtHex.isNotEmpty) {
@@ -154,8 +146,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-
-        // --- 2. BODY COMPUTER APTIV (18DA40F1 / 18DAF140) ---
         String respIbs = await sendObdCommand("18DA40F1", "18DAF140", "22 21 0B");
         String ibsHex = parseHexResponse(respIbs, "62 21 0B");
         if (ibsHex.isNotEmpty && ibsHex.length >= 2) {
@@ -167,7 +157,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Tensione Batteria Body (+30): 22 20 04
         String respVolt = await sendObdCommand("18DA40F1", "18DAF140", "22 20 04");
         String voltHex = parseHexResponse(respVolt, "62 20 04");
         if (voltHex.isNotEmpty) {
@@ -179,9 +168,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-
-        // --- 3. CENTRALINA MOTORE GSE (18DA10F1 / 18DAF110) ---
-        // Vita restante olio motore: 22 38 1B
         String respOlio = await sendObdCommand("18DA10F1", "18DAF110", "22 38 1B");
         String olioHex = parseHexResponse(respOlio, "62 38 1B");
         if (olioHex.isNotEmpty) {
@@ -192,7 +178,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
         }
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Temperatura Liquido Motore: 22 10 00 da IPC o Motore
         String respTempMot = await sendObdCommand("18DA60F1", "18DAF160", "22 10 00");
         String tempMotHex = parseHexResponse(respTempMot, "62 10 00");
         if (tempMotHex.isNotEmpty) {
@@ -203,15 +188,13 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
           }
         }
 
-      } catch (e) {
-        // Gestione silenziata errori di polling per evitare blocchi UI
+      } catch (_) {
       } finally {
         _isPolling = false;
       }
     });
   }
 
-  // Funzioni di supporto per il parsing esadecimale UDS
   String parseHexResponse(String response, String headerPrefix) {
     if (!response.contains(headerPrefix)) return "";
     try {
@@ -276,7 +259,6 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
             icon: Icon(isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled),
             color: isConnected ? Colors.green : Colors.red,
             onPressed: () {
-              // Schermata di selezione o disconnessione
               if (isConnected) {
                 connection?.close();
                 pollingTimer?.cancel();
@@ -379,4 +361,3 @@ class _DiagnosticHomeScreenState extends State<DiagnosticHomeScreen> {
     );
   }
 }
-
