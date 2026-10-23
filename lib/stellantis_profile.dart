@@ -26,6 +26,16 @@ class StellantisProfile {
   String bcmIbsSocVal = "---", bcmBatteryVoltVal = "---";
   String ipcRangeVal = "---", ipcTpmsVal = "---", ipcServiceKmVal = "---", ipcAvgConsVal = "---", ipcVoltVal = "---";
 
+  // Variabili richieste dalla UI per le centraline secondarie
+  String dtcDetails = "---";
+  String epsAngleVal = "---";
+  String absSpeedVal = "---";
+  String airbagStatusVal = "---";
+  String hvacTempVal = "---";
+  String radioStatusVal = "---";
+  String pamDistVal = "---";
+  String accStatusVal = "---";
+
   List<int> bytes(String raw, String m1, [String? m2, String? m3]) {
     try {
       String cl = raw.replaceAll(">", "").replaceAll(RegExp(r'[0-9A-Fa-f]:'), ' ').replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
@@ -105,9 +115,11 @@ class StellantisProfile {
     if (dB.isNotEmpty) {
       int c = (dB.length - 1) ~/ 4;
       dtcVal = c <= 0 ? "0 (OK)" : "$c Errori";
+      dtcDetails = "Codici grezzi: $raw";
       return;
     } else if (raw.contains("59 02 00") || raw.contains("7F 19")) {
       dtcVal = "0 (OK)";
+      dtcDetails = "Nessun errore rilevato";
       return;
     }
     
@@ -117,12 +129,17 @@ class StellantisProfile {
       if (m1.isNotEmpty) {
         int c = m1[0] & 0x7F;
         dtcVal = c == 0 ? "0 (OK)" : "$c Errori";
+        dtcDetails = c == 0 ? "Nessun errore rilevato" : "Errori presenti in centralina";
         return;
       }
     }
     
     if (!raw.contains("NO DATA") && !raw.contains("ERROR")) {
       dtcVal = "0 (OK)";
+      dtcDetails = "Nessun errore rilevato";
+    } else {
+      dtcVal = "---";
+      dtcDetails = "Errore di lettura DTC";
     }
   }
 
@@ -214,57 +231,64 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        // Vita Olio specifica per Firefly
-        List<int> oilB = bytes(await obd.queryObd("22 10 43\r", timeoutMs: 150), "62", "10", "43");
-        if (oilB.isEmpty) oilB = bytes(await obd.queryObd("22 18 82\r", timeoutMs: 150), "62", "18", "82");
-        if (oilB.isNotEmpty) {
-           int val = oilB.length >= 2 ? ((oilB[0] * 256) + oilB[1]) : oilB[0];
-           if (val > 100 && val <= 10000) val = val ~/ 100;
-           if (val > 0 && val <= 100) oilLifeVal = val.toString();
+        for (var d in [["38", "13"], ["18", "08"], ["10", "43"], ["19", "42"], ["18", "82"], ["19", "06"], ["38", "1A"], ["22", "11"]]) {
+          List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
+          if (b.isNotEmpty) {
+            int v = -1;
+            if (b.length >= 2) {
+              int raw16 = (b[0] * 256) + b[1];
+              if (raw16 >= 0 && raw16 <= 100) v = raw16;
+              else if (raw16 > 100 && raw16 <= 1000) v = raw16 ~/ 10;
+              else if (raw16 > 1000 && raw16 <= 10000) v = raw16 ~/ 100;
+            }
+            if (v == -1 && b[0] >= 0 && b[0] <= 100) v = b[0];
+            if (v >= 0 && v <= 100) {
+              oilLifeVal = v.toString();
+              break;
+            }
+          }
         }
       }
-      
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      
-      // Carica Batteria IBS
-      for (var d in [["40", "2A"], ["40", "2B"], ["19", "35"]]) {
+      for (var d in [["40", "28"], ["40", "2A"], ["40", "2B"], ["40", "29"], ["19", "35"], ["03", "02"], ["21", "15"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
-        if (b.isNotEmpty && b[0] > 0 && b[0] <= 100) {
-          bcmIbsSocVal = b[0].toString();
-          break;
+        if (b.isNotEmpty) {
+          for (int x in b) {
+            if (x > 0 && x <= 100) {
+              bcmIbsSocVal = x.toString();
+              break;
+            }
+          }
+          if (bcmIbsSocVal != "---") break;
         }
       }
-      
       if (tick % 3 == 0) {
         await _updateShared(obd, "40");
         await _updateDtc(obd);
       }
-      
     } else if (selectedEcu == "ABS") {
-      param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120)); // Tensione ABS
+      param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
       
-      // Velocità Ruote
       List<int> ws = bytes(await obd.queryObd("22 20 01\r", timeoutMs: 140), "62", "20", "01");
       if (ws.isEmpty) ws = bytes(await obd.queryObd("22 10 18\r", timeoutMs: 140), "62", "10", "18");
       if (ws.isNotEmpty && ws[0] > 0) {
-         param2Val = (ws[0] - 40).toString(); 
+         absSpeedVal = (ws[0] - 40).toString(); 
       } else {
          List<int> obdSpd = bytes(await obd.queryObd("010D\r", timeoutMs: 120), "41", "0D");
-         if (obdSpd.isNotEmpty) param2Val = obdSpd[0].toString();
+         if (obdSpd.isNotEmpty) absSpeedVal = obdSpd[0].toString();
       }
       
       if (tick % 3 == 0) await _updateDtc(obd);
       
     } else if (selectedEcu == "Servosterzo") {
-      param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120)); // Tensione EPS
+      param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
       
-      // Angolo Sterzo
       List<int> sa = bytes(await obd.queryObd("22 19 00\r", timeoutMs: 140), "62", "19", "00");
       if (sa.isEmpty) sa = bytes(await obd.queryObd("22 10 03\r", timeoutMs: 140), "62", "10", "03");
       if (sa.length >= 2) {
          int v = (sa[0] * 256) + sa[1];
-         param2Val = ((v - 32768) / 10.0).toStringAsFixed(1);
+         epsAngleVal = ((v - 32768) / 10.0).toStringAsFixed(1);
       }
       
       if (tick % 3 == 0) await _updateDtc(obd);
@@ -329,12 +353,16 @@ class StellantisProfile {
         await _updateDtc(obd);
         ipcTpmsVal = dtcVal == "0 (OK)" ? "Regolare" : dtcVal;
       }
-      
     } else {
-      // ECU generiche (Radio, Clima, Cruise, Airbag, Sensori)
       param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      param2Val = decodeAscii(await obd.queryObd("22 F1 90\r", timeoutMs: 180));
-      param3Val = param2Val != "N/D" ? "Comunicazione OK" : "Attiva";
+      String status = "Attiva";
+      
+      if (selectedEcu == "Airbag") airbagStatusVal = status;
+      else if (selectedEcu == "Climatizzatore") hvacTempVal = "N/D";
+      else if (selectedEcu == "Radio / Uconnect") radioStatusVal = status;
+      else if (selectedEcu == "Sensori di Parcheggio") pamDistVal = "---";
+      else if (selectedEcu == "Cruise Control") accStatusVal = status;
+      
       if (tick % 3 == 0) await _updateDtc(obd);
     }
   }
