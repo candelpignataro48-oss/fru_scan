@@ -19,6 +19,9 @@ class StellantisProfile {
   String fuelVal = "---", odoVal = "---", extTempVal = "---", dtcVal = "---";
   double? _smoothedFuelPct, _avgKml;
   int? _odoKm;
+  
+  String _lastDtc = "---";
+  String _lastDtcDetails = "---";
 
   String param1Val = "---", param2Val = "---", param3Val = "---";
   String rpmVal = "---", speedVal = "---", turboVal = "---", batteryVal = "---";
@@ -26,7 +29,6 @@ class StellantisProfile {
   String bcmIbsSocVal = "---", bcmBatteryVoltVal = "---";
   String ipcRangeVal = "---", ipcTpmsVal = "---", ipcServiceKmVal = "---", ipcAvgConsVal = "---", ipcVoltVal = "---";
 
-  // Variabili richieste dalla UI per le centraline secondarie
   String dtcDetails = "---";
   String epsAngleVal = "---";
   String absSpeedVal = "---";
@@ -110,37 +112,29 @@ class StellantisProfile {
 
   Future<void> _updateDtc(ObdService obd, {bool isEng = false}) async {
     String raw = await obd.queryObd("19 02 09\r", timeoutMs: 170);
-    List<int> dB = bytes(raw, "59", "02");
     
-    if (dB.isNotEmpty) {
-      int c = (dB.length - 1) ~/ 4;
-      dtcVal = c <= 0 ? "0 (OK)" : "$c Errori";
-      dtcDetails = "Codici grezzi: $raw";
-      return;
-    } else if (raw.contains("59 02 00") || raw.contains("7F 19")) {
-      dtcVal = "0 (OK)";
-      dtcDetails = "Nessun errore rilevato";
-      return;
-    }
-    
-    if (isEng) {
-      String rawEng = await obd.queryObd("0101\r", timeoutMs: 150);
-      List<int> m1 = bytes(rawEng, "41", "01");
-      if (m1.isNotEmpty) {
-        int c = m1[0] & 0x7F;
-        dtcVal = c == 0 ? "0 (OK)" : "$c Errori";
-        dtcDetails = c == 0 ? "Nessun errore rilevato" : "Errori presenti in centralina";
-        return;
+    if (raw.contains("59 02 00") || raw.contains("7F 19")) {
+      _lastDtc = "0 (OK)";
+      _lastDtcDetails = "Nessun errore rilevato";
+    } else {
+      List<int> dB = bytes(raw, "59", "02");
+      if (dB.isNotEmpty) {
+        int c = (dB.length - 1) ~/ 4;
+        _lastDtc = c <= 0 ? "0 (OK)" : "$c Errori";
+        _lastDtcDetails = "Codici grezzi: $raw";
+      } else if (isEng) {
+        String rawEng = await obd.queryObd("0101\r", timeoutMs: 150);
+        List<int> m1 = bytes(rawEng, "41", "01");
+        if (m1.isNotEmpty) {
+          int c = m1[0] & 0x7F;
+          _lastDtc = c == 0 ? "0 (OK)" : "$c Errori";
+          _lastDtcDetails = c == 0 ? "Nessun errore" : "Errori in centralina";
+        }
       }
     }
     
-    if (!raw.contains("NO DATA") && !raw.contains("ERROR")) {
-      dtcVal = "0 (OK)";
-      dtcDetails = "Nessun errore rilevato";
-    } else {
-      dtcVal = "---";
-      dtcDetails = "Errore di lettura DTC";
-    }
+    dtcVal = _lastDtc;
+    dtcDetails = _lastDtcDetails;
   }
 
   Future<String> resetDtc(ObdService obd) async {
@@ -231,18 +225,14 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        for (var d in [["38", "13"], ["18", "08"], ["10", "43"], ["19", "42"], ["18", "82"], ["19", "06"], ["38", "1A"], ["22", "11"]]) {
+        for (var d in [["10", "65"], ["38", "13"], ["18", "08"], ["10", "43"], ["19", "42"], ["18", "82"]]) {
           List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
           if (b.isNotEmpty) {
-            int v = -1;
-            if (b.length >= 2) {
-              int raw16 = (b[0] * 256) + b[1];
-              if (raw16 >= 0 && raw16 <= 100) v = raw16;
-              else if (raw16 > 100 && raw16 <= 1000) v = raw16 ~/ 10;
-              else if (raw16 > 1000 && raw16 <= 10000) v = raw16 ~/ 100;
+            int v = b[0];
+            if (b.length >= 2 && v > 100) {
+              v = ((b[0] * 256) + b[1]) ~/ 100;
             }
-            if (v == -1 && b[0] >= 0 && b[0] <= 100) v = b[0];
-            if (v >= 0 && v <= 100) {
+            if (v > 0 && v <= 100) {
               oilLifeVal = v.toString();
               break;
             }
@@ -251,16 +241,11 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["40", "28"], ["40", "2A"], ["40", "2B"], ["40", "29"], ["19", "35"], ["03", "02"], ["21", "15"]]) {
+      for (var d in [["40", "28"], ["40", "2A"], ["40", "2B"], ["03", "02"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
-        if (b.isNotEmpty) {
-          for (int x in b) {
-            if (x > 0 && x <= 100) {
-              bcmIbsSocVal = x.toString();
-              break;
-            }
-          }
-          if (bcmIbsSocVal != "---") break;
+        if (b.isNotEmpty && b[0] > 0 && b[0] <= 100) {
+          bcmIbsSocVal = b[0].toString();
+          break;
         }
       }
       if (tick % 3 == 0) {
@@ -269,58 +254,41 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "ABS") {
       param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      
       List<int> ws = bytes(await obd.queryObd("22 20 01\r", timeoutMs: 140), "62", "20", "01");
       if (ws.isEmpty) ws = bytes(await obd.queryObd("22 10 18\r", timeoutMs: 140), "62", "10", "18");
-      if (ws.isNotEmpty && ws[0] > 0) {
-         absSpeedVal = (ws[0] - 40).toString(); 
+      if (ws.isNotEmpty) {
+         absSpeedVal = ws[0].toString(); 
       } else {
          List<int> obdSpd = bytes(await obd.queryObd("010D\r", timeoutMs: 120), "41", "0D");
          if (obdSpd.isNotEmpty) absSpeedVal = obdSpd[0].toString();
       }
-      
       if (tick % 3 == 0) await _updateDtc(obd);
       
     } else if (selectedEcu == "Servosterzo") {
       param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      
       List<int> sa = bytes(await obd.queryObd("22 19 00\r", timeoutMs: 140), "62", "19", "00");
       if (sa.isEmpty) sa = bytes(await obd.queryObd("22 10 03\r", timeoutMs: 140), "62", "10", "03");
       if (sa.length >= 2) {
          int v = (sa[0] * 256) + sa[1];
-         epsAngleVal = ((v - 32768) / 10.0).toStringAsFixed(1);
+         double angle = (v - 32768) / 10.0;
+         if (angle > -1000 && angle < 1000) {
+           epsAngleVal = angle.toStringAsFixed(1);
+         }
       }
-      
       if (tick % 3 == 0) await _updateDtc(obd);
       
     } else if (selectedEcu == "Quadro Strumenti") {
       ipcVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["21", "01"], ["20", "10"], ["20", "11"], ["F1", "C2"], ["19", "20"]]) {
+      for (var d in [["21", "01"], ["20", "10"], ["20", "11"]]) {
         List<int> sB = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 150), "62", d[0], d[1]);
-        if (sB.length >= 2) {
-          int kmVal = -1;
-          int? daysVal;
-          if (sB.length >= 3 && d[0] == "21") {
-            int raw24 = (sB[0] * 65536) + (sB[1] * 256) + sB[2];
-            if (raw24 <= 50000) kmVal = raw24;
-          }
-          if (kmVal == -1) {
-            int rawWord = (sB[0] * 256) + sB[1];
-            if (rawWord <= 30000) kmVal = rawWord;
-            else if (rawWord > 30000 && rawWord <= 300000) kmVal = rawWord ~/ 10;
-          }
-          if (kmVal >= 0 && kmVal <= 50000) {
-            if (sB.length >= 4) {
-              int dC = (sB[2] * 256) + sB[3];
-              if (dC > 0 && dC <= 730) daysVal = dC;
-              else if (sB.length >= 6) {
-                int dAlt = (sB[4] * 256) + sB[5];
-                if (dAlt >= 0 && dAlt <= 730) daysVal = dAlt;
-              }
-            }
-            ipcServiceKmVal = daysVal != null ? "$kmVal/15000 ($daysVal gg)" : "$kmVal/15000";
-            break;
-          }
+        if (sB.length >= 3) {
+           int kmVal = (sB[0] * 65536) + (sB[1] * 256) + sB[2];
+           if (kmVal > 50000) kmVal = ((sB[0] * 256) + sB[1]); 
+           if (kmVal > 50000 && sB.length >= 5) kmVal = (sB[2] * 65536) + (sB[3] * 256) + sB[4];
+           if (kmVal >= 0 && kmVal <= 50000) {
+             ipcServiceKmVal = "$kmVal/15000 km";
+             break;
+           }
         }
       }
 
