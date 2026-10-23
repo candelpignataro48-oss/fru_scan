@@ -168,7 +168,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  // Popup interattivo per la gestione e il reset dei DTC
   void _showDtcDetailDialog() {
     showDialog(
       context: context,
