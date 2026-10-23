@@ -229,9 +229,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Text("Codici rilevati in centralina:", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            // Utilizziamo una nuova variabile dtcDetails che aggiungeremo al profilo
             Text(
-              "In attesa dei dettagli...", 
+              profile.dtcDetails, 
               style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.4)
             ),
           ],
@@ -260,7 +259,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Modificato per accettare un onTap opzionale per rendere il riquadro cliccabile
   Widget _c(IconData ic, String title, String val, String unit, Color col, {VoidCallback? onTap}) => GestureDetector(
         onTap: onTap,
         child: Container(
@@ -299,7 +297,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
   List<Widget> _cardsForEcu() {
-    // Logica cromatica e interattiva per il riquadro DTC
     Color dtcColor = (profile.dtcVal == "0 (OK)" || profile.dtcVal == "---") ? Colors.greenAccent : Colors.redAccent;
     Widget dtcWidget = _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", dtcColor, onTap: () {
       if (profile.dtcVal != "0 (OK)" && profile.dtcVal != "---") {
@@ -340,7 +337,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _c(Icons.tire_repair, "Pressione Gomme (TPMS)", profile.ipcTpmsVal, "", Colors.greenAccent),
         dtcWidget,
       ];
+    } else if (selectedEcu == "Servosterzo") {
+      return [
+        _c(Icons.compare_arrows, "Angolo Sterzo", "N/D", "°", Colors.blueAccent),
+        _c(Icons.bolt, "Tensione EPS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "ABS") {
+      return [
+        _c(Icons.speed, "Velocità Ruote", "N/D", "km/h", Colors.orangeAccent),
+        _c(Icons.bolt, "Tensione ABS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Airbag") {
+      return [
+        _c(Icons.airline_seat_recline_normal, "Stato Cariche", "N/D", "", Colors.cyanAccent),
+        _c(Icons.bolt, "Tensione SRS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Climatizzatore") {
+      return [
+        _c(Icons.ac_unit, "Temp. Abitacolo", "N/D", "°C", Colors.lightBlueAccent),
+        _c(Icons.bolt, "Tensione HVAC", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Radio / Uconnect") {
+      return [
+        _c(Icons.radio, "Stato Sistema", "N/D", "", Colors.amber),
+        _c(Icons.bolt, "Tensione Radio", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Sensori di Parcheggio") {
+      return [
+        _c(Icons.sensors, "Distanza Ostacoli", "N/D", "cm", Colors.tealAccent),
+        _c(Icons.bolt, "Tensione PAM", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Cruise Control") {
+      return [
+        _c(Icons.add_road, "Stato Cruise", "N/D", "", Colors.greenAccent),
+        _c(Icons.bolt, "Tensione ACC", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
     }
+    
+    // Fallback di sicurezza per eventuali altre centraline future
     return [
       _c(Icons.bolt, "Tensione Linea ECU", profile.param1Val, "V", Colors.purpleAccent),
       _c(Icons.info, "VIN / Identificativo", profile.param2Val, "", Colors.greenAccent),
