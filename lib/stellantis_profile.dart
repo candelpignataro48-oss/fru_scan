@@ -201,17 +201,17 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        for (var d in [["38", "13"], ["18", "08"], ["10", "43"], ["19", "42"], ["18", "82"], ["19", "06"], ["38", "1A"], ["22", "11"]]) {
+        for (var d in [["19", "42"], ["18", "08"], ["38", "13"], ["10", "43"], ["18", "82"], ["19", "06"], ["38", "1A"], ["22", "11"]]) {
           List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
           if (b.isNotEmpty) {
             int v = -1;
-            if (b.length >= 2) {
+            if (b[0] >= 0 && b[0] <= 100) v = b[0];
+            else if (b.length >= 2) {
               int raw16 = (b[0] * 256) + b[1];
-              if (raw16 >= 0 && raw16 <= 100) v = raw16;
-              else if (raw16 > 100 && raw16 <= 1000) v = raw16 ~/ 10;
-              else if (raw16 > 1000 && raw16 <= 10000) v = raw16 ~/ 100;
+              if (raw16 > 100 && raw16 <= 10000) {
+                v = raw16 % 100 == 0 ? raw16 ~/ 100 : (raw16 * 100) ~/ 65535;
+              }
             }
-            if (v == -1 && b[0] >= 0 && b[0] <= 100) v = b[0];
             if (v >= 0 && v <= 100) {
               oilLifeVal = v.toString();
               break;
@@ -221,16 +221,20 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["40", "28"], ["40", "2A"], ["40", "2B"], ["40", "29"], ["19", "35"], ["03", "02"], ["21", "15"]]) {
+      for (var d in [["03", "02"], ["40", "2A"], ["40", "28"], ["40", "2B"], ["40", "29"], ["19", "35"], ["21", "15"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
         if (b.isNotEmpty) {
+          int found = -1;
           for (int x in b) {
             if (x > 0 && x <= 100) {
-              bcmIbsSocVal = x.toString();
+              found = x;
               break;
             }
           }
-          if (bcmIbsSocVal != "---") break;
+          if (found != -1) {
+            bcmIbsSocVal = found.toString();
+            break;
+          }
         }
       }
       if (tick % 3 == 0) {
@@ -239,28 +243,27 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Quadro Strumenti") {
       ipcVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["21", "01"], ["20", "10"], ["20", "11"], ["F1", "C2"], ["19", "20"]]) {
+      for (var d in [["20", "10"], ["20", "11"], ["21", "01"], ["F1", "C2"], ["19", "20"]]) {
         List<int> sB = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 150), "62", d[0], d[1]);
         if (sB.length >= 2) {
           int kmVal = -1;
           int? daysVal;
-          if (sB.length >= 3) {
-            int raw24 = (sB[0] * 65536) + (sB[1] * 256) + sB[2];
-            if (raw24 <= 50000) kmVal = raw24;
-          }
-          if (kmVal == -1) {
-            int rawWord = (sB[0] * 256) + sB[1];
-            if (rawWord <= 30000) kmVal = rawWord;
-            else if (rawWord > 30000 && rawWord <= 300000) kmVal = rawWord ~/ 10;
-          }
+          int raw16 = (sB[0] * 256) + sB[1];
+          int raw24 = sB.length >= 3 ? (sB[0] * 65536) + (sB[1] * 256) + sB[2] : -1;
+          
+          if (raw16 <= 50000) kmVal = raw16;
+          else if ((raw16 * 10) <= 50000) kmVal = raw16 * 10;
+          else if (raw24 >= 0 && raw24 <= 50000) kmVal = raw24;
+          else if (raw24 >= 0 && (raw24 ~/ 10) <= 50000) kmVal = raw24 ~/ 10;
+
           if (kmVal >= 0 && kmVal <= 50000) {
             if (sB.length >= 4) {
               int dC = (sB[2] * 256) + sB[3];
-              if (dC > 0 && dC <= 730) daysVal = dC;
-              else if (sB.length >= 6) {
-                int dAlt = (sB[4] * 256) + sB[5];
-                if (dAlt >= 0 && dAlt <= 730) daysVal = dAlt;
+              if (sB.length >= 5 && raw24 >= 0) {
+                int dAlt = (sB[3] * 256) + sB[4];
+                if (dAlt > 0 && dAlt <= 730) daysVal = dAlt;
               }
+              if (daysVal == null && dC > 0 && dC <= 730) daysVal = dC;
             }
             ipcServiceKmVal = daysVal != null ? "$kmVal/15000 ($daysVal gg)" : "$kmVal/15000";
             break;
