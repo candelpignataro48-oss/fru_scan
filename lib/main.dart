@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'obd_service.dart';
@@ -60,6 +61,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Finestra modale dei Log di Diagnostica
+  void _showLogsModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateModal) => AlertDialog(
+          backgroundColor: const Color(0xFF161A1D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.between,
+            children: [
+              const Text("Log di Diagnostica OBD",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                onPressed: () {
+                  obd.clearLogs();
+                  setStateModal(() {});
+                },
+                tooltip: "Svuota log",
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 350,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Text(
+                  obd.getLogs().isEmpty ? "Nessun log registrato..." : obd.getLogs(),
+                  style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: obd.getLogs()));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Log copiati negli appunti!")),
+                );
+              },
+              child: const Text("Copia Log", style: TextStyle(color: Color(0xFFFFB74D))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFB74D), foregroundColor: Colors.black),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     obd.disconnect();
@@ -72,17 +136,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       statusMessage = "Richiesta permessi...";
     });
     _updateLiveStatus("Richiesta permessi Bluetooth in corso...", StatusType.info);
-    
+
     await [
       Permission.bluetooth,
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
       Permission.location
     ].request();
-    
+
     setState(() => statusMessage = "Lettura dispositivi...");
     _updateLiveStatus("Scansione dispositivi Bluetooth associati...", StatusType.info);
-    
+
     try {
       List<BluetoothDevice> devs = await obd.getBondedDevices();
       setState(() {
@@ -90,7 +154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         statusMessage = "Seleziona interfaccia";
       });
       _updateLiveStatus("Seleziona l'interfaccia OBD dalla lista", StatusType.info);
-      
+
       if (!mounted) return;
       showDialog(
         context: context,
@@ -201,7 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       await obd.initEcuChannel(id);
       String part = await profile.readHardwarePartCode(obd);
-      
+
       if (part == "N/D" || part.contains("ERROR")) {
         _updateLiveStatus("Avviso: Nessuna risposta valida da $ecuName (Verifica quadro acceso)", StatusType.error);
       } else {
@@ -210,7 +274,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (mounted) {
         setState(() {
-          ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code: $part";
+          ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code:$part";
         });
       }
     } catch (_) {
@@ -424,247 +488,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
-    } else if (selectedEcu == "Radio / Uconnect") {
-      return [
-        _c(Icons.radio, "Stato Sistema", profile.radioStatusVal, "", Colors.amber),
-        _c(Icons.bolt, "Tensione Radio", profile.param1Val, "V", Colors.purpleAccent),
-        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
-        dtcWidget,
-      ];
-    } else if (selectedEcu == "Sensori di Parcheggio") {
-      return [
-        _c(Icons.sensors, "Distanza Ostacoli", profile.pamDistVal, "cm", Colors.tealAccent),
-        _c(Icons.bolt, "Tensione PAM", profile.param1Val, "V", Colors.purpleAccent),
-        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
-        dtcWidget,
-      ];
-    } else if (selectedEcu == "Cruise Control") {
-      return [
-        _c(Icons.add_road, "Stato Cruise", profile.accStatusVal, "", Colors.greenAccent),
-        _c(Icons.bolt, "Tensione ACC", profile.param1Val, "V", Colors.purpleAccent),
-        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
-        dtcWidget,
-      ];
-    }
-    
-    return [
-      _c(Icons.bolt, "Tensione Linea ECU", profile.param1Val, "V", Colors.purpleAccent),
-      _c(Icons.info, "VIN / Identificativo", profile.param2Val, "", Colors.greenAccent),
-      _c(Icons.check_circle_outline, "Stato Connessione", profile.param3Val, "", Colors.cyanAccent),
-      dtcWidget,
-    ];
-  }
-
-  Widget _ddBox(String label, String? val, List<String> items, ValueChanged<String?>? onChg) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-              color: const Color(0xFF161A1D),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.2)),
-          child: Row(
-            children: [
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: val,
-                    hint: const Text("Nessuno", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    isExpanded: true,
-                    dropdownColor: const Color(0xFF161A1D),
-                    style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold),
-                    items: items.map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
-                    onChanged: onChg,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    bool isFiat = selectedBrand == "Fiat/Stellantis";
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('FRU SCAN',
-            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(10.0),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                  color: const Color(0xFF161A1D),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.withOpacity(0.3))),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-                          color: isConnected ? Colors.greenAccent : Colors.orangeAccent, size: 16),
-                      const SizedBox(width: 6),
-                      Text(isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
-                              foregroundColor: isConnected ? Colors.white : Colors.black,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(vertical: 8)),
-                          onPressed:
-                              isConnecting ? null : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
-                          child: Text(
-                              isConnecting
-                                  ? "Connessione..."
-                                  : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: isEcuConnected
-                            ? ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange[800],
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    padding: const EdgeInsets.symmetric(vertical: 8)),
-                                onPressed: disconnectEcu,
-                                child: const Text("DISCONNETTI ECU",
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              )
-                            : OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFFFFB74D),
-                                    side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    padding: const EdgeInsets.symmetric(vertical: 8)),
-                                onPressed: _showEcuSelector,
-                                icon: const Icon(Icons.settings_input_component, size: 16),
-                                label: const Text("SELEZIONA ECU",
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            // NUOVA BARRA DI STATO DINAMICA (Live Status Banner)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A1D),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: liveStatusColor.withOpacity(0.6), width: 1),
-              ),
-              child: Row(
-                children: [
-                  Icon(liveStatusIcon, color: liveStatusColor, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      liveStatusText,
-                      style: TextStyle(color: liveStatusColor, fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (isEcuConnected) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: const Color(0xFF161A1D),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      const Icon(Icons.check_circle, color: Colors.greenAccent, size: 15),
-                      const SizedBox(width: 6),
-                      Text("Centralina Attiva: $selectedEcu",
-                          style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold))
-                    ]),
-                    const SizedBox(height: 4),
-                    Text(ecuResponseInfo, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                _ddBox("Marca:", selectedBrand, profile.brandList, (v) {
-                  setState(() {
-                    selectedBrand = v!;
-                    selectedModel = (selectedBrand == "Fiat/Stellantis") ? "Tipo Cross 1.0 T3" : "";
-                  });
-                }),
-                const SizedBox(width: 8),
-                _ddBox("Modello:", selectedModel.isEmpty ? null : selectedModel,
-                    isFiat ? ["Tipo Cross 1.0 T3"] : [], isFiat ? (v) => setState(() => selectedModel = v!) : null),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: isEcuConnected
-                  ? GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 1.45,
-                      children: _cardsForEcu(),
-                    )
-                  : Center(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                            color: const Color(0xFF161A1D),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey.withOpacity(0.3))),
-                        child: const Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
-                            SizedBox(height: 12),
-                            Text(
-                                "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-enum StatusType { info, success, error }
+    } else if (selectedEcu == "Radio / U
