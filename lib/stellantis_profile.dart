@@ -17,7 +17,7 @@ class StellantisProfile {
   };
 
   String fuelVal = "---", odoVal = "---", extTempVal = "---", dtcVal = "---";
-  double? _fuelPct, _avgKml;
+  double? _smoothedFuelPct, _avgKml;
   int? _odoKm;
 
   String param1Val = "---", param2Val = "---", param3Val = "---";
@@ -84,9 +84,9 @@ class StellantisProfile {
 
   String? _extT(List<int> b) {
     for (int x in b) {
-      if (x > 0 && x < 250 && x != 128) {
+      if (x > 0 && x < 250 && x != 128 && x != 4) {
         int temp = x - 40;
-        if (temp >= -40 && temp <= 60) {
+        if (temp >= -30 && temp <= 60) {
           return temp.toString();
         }
       }
@@ -120,21 +120,29 @@ class StellantisProfile {
   }
 
   Future<void> _updateShared(ObdService obd, String curId) async {
+    double? rawFuel;
     if (curId == "10") {
       List<int> obdF = bytes(await obd.queryObd("012F\r", timeoutMs: 140), "41", "2F");
       if (obdF.isNotEmpty && obdF[0] >= 0) {
-        _fuelPct = (obdF[0] * 100.0) / 255.0;
-        fuelVal = _fuelPct!.round().toString();
+        rawFuel = (obdF[0] * 100.0) / 255.0;
       } else {
         List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
-        if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) fuelVal = fB[0].toString();
+        if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) rawFuel = fB[0].toDouble();
       }
     } else {
       List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
       if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
-        _fuelPct = fB[0].toDouble();
-        fuelVal = fB[0].toString();
+        rawFuel = fB[0].toDouble();
       }
+    }
+
+    if (rawFuel != null) {
+      if (_smoothedFuelPct == null) {
+        _smoothedFuelPct = rawFuel;
+      } else {
+        _smoothedFuelPct = (_smoothedFuelPct! * 0.90) + (rawFuel * 0.10);
+      }
+      fuelVal = _smoothedFuelPct!.round().toString();
     }
 
     String? vT;
@@ -193,7 +201,7 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "06"], ["38", "1A"], ["22", "11"], ["10", "43"]]) {
+        for (var d in [["38", "13"], ["18", "08"], ["10", "43"], ["19", "42"], ["18", "82"], ["19", "06"], ["38", "1A"], ["22", "11"]]) {
           List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
           if (b.isNotEmpty) {
             int v = -1;
@@ -213,7 +221,7 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["40", "2A"], ["40", "24"], ["19", "35"], ["40", "2B"], ["03", "02"], ["21", "15"]]) {
+      for (var d in [["40", "28"], ["40", "2A"], ["40", "2B"], ["40", "29"], ["19", "35"], ["03", "02"], ["21", "15"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
         if (b.isNotEmpty) {
           for (int x in b) {
@@ -236,7 +244,7 @@ class StellantisProfile {
         if (sB.length >= 2) {
           int kmVal = -1;
           int? daysVal;
-          if (sB.length >= 3 && d[0] == "21") {
+          if (sB.length >= 3) {
             int raw24 = (sB[0] * 65536) + (sB[1] * 256) + sB[2];
             if (raw24 <= 50000) kmVal = raw24;
           }
@@ -269,13 +277,21 @@ class StellantisProfile {
           _avgKml = v;
           ipcAvgConsVal = v.toStringAsFixed(1);
         }
+      } else {
+        List<int> spdB = bytes(await obd.queryObd("22 01 0D\r", timeoutMs: 120), "62", "01", "0D");
+        if (spdB.isNotEmpty) {
+          double spd = spdB[0].toDouble();
+          if (spd > 3.0 && _smoothedFuelPct != null && _smoothedFuelPct! > 0) {
+             ipcAvgConsVal = _avgKml != null ? _avgKml!.toStringAsFixed(1) : "---";
+          }
+        }
       }
       List<int> rB = bytes(await obd.queryObd("22 20 07\r", timeoutMs: 140), "62", "20", "07");
       if (rB.length >= 2) {
         int rKm = (rB[0] * 256) + rB[1];
         if (rKm > 0 && rKm < 1500) ipcRangeVal = rKm.toString();
-      } else if (_fuelPct != null) {
-        ipcRangeVal = (((_fuelPct! / 100.0) * 50.0) * (_avgKml ?? 15.0)).round().toString();
+      } else if (_smoothedFuelPct != null) {
+        ipcRangeVal = (((_smoothedFuelPct! / 100.0) * 50.0) * (_avgKml ?? 15.0)).round().toString();
       }
       if (tick % 4 == 0) {
         await _updateDtc(obd);
