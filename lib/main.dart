@@ -35,6 +35,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String ecuResponseInfo = "Nessuna ECU interrogata";
   String selectedBrand = "Fiat/Stellantis", selectedModel = "Tipo Cross 1.0 T3";
 
+  // Variabili per la nuova Barra di Stato Dinamica
+  String liveStatusText = "Pronto: Connetti l'adattatore Bluetooth OBD";
+  Color liveStatusColor = Colors.orangeAccent;
+  IconData liveStatusIcon = Icons.info_outline;
+
+  void _updateLiveStatus(String text, StatusType type) {
+    setState(() {
+      liveStatusText = text;
+      switch (type) {
+        case StatusType.info:
+          liveStatusColor = Colors.orangeAccent;
+          liveStatusIcon = Icons.sync;
+          break;
+        case StatusType.success:
+          liveStatusColor = Colors.greenAccent;
+          liveStatusIcon = Icons.check_circle_outline;
+          break;
+        case StatusType.error:
+          liveStatusColor = Colors.redAccent;
+          liveStatusIcon = Icons.error_outline;
+          break;
+      }
+    });
+  }
+
   @override
   void dispose() {
     obd.disconnect();
@@ -46,19 +71,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isConnecting = true;
       statusMessage = "Richiesta permessi...";
     });
+    _updateLiveStatus("Richiesta permessi Bluetooth in corso...", StatusType.info);
+    
     await [
       Permission.bluetooth,
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
       Permission.location
     ].request();
+    
     setState(() => statusMessage = "Lettura dispositivi...");
+    _updateLiveStatus("Scansione dispositivi Bluetooth associati...", StatusType.info);
+    
     try {
       List<BluetoothDevice> devs = await obd.getBondedDevices();
       setState(() {
         isConnecting = false;
         statusMessage = "Seleziona interfaccia";
       });
+      _updateLiveStatus("Seleziona l'interfaccia OBD dalla lista", StatusType.info);
+      
       if (!mounted) return;
       showDialog(
         context: context,
@@ -90,7 +122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _updateLiveStatus("Connessione annullata dall'utente", StatusType.info);
+                },
                 child: const Text("Annulla", style: TextStyle(color: Colors.grey)))
           ],
         ),
@@ -100,6 +135,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         isConnecting = false;
         statusMessage = "Errore scansione Bluetooth";
       });
+      _updateLiveStatus("Errore: Impossibile completare la scansione Bluetooth", StatusType.error);
     }
   }
 
@@ -108,6 +144,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isConnecting = true;
       statusMessage = "Connessione a ${d.name ?? d.address}...";
     });
+    _updateLiveStatus("Tentativo di connessione a ${d.name ?? d.address}...", StatusType.info);
+
     bool ok = await obd.connectToDevice(d);
     if (ok) {
       setState(() {
@@ -116,12 +154,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         connectedDeviceName = d.name ?? d.address;
         statusMessage = "Bluetooth Connesso";
       });
+      _updateLiveStatus("Connesso a $connectedDeviceName. Scegli una centralina.", StatusType.success);
     } else {
       setState(() {
         isConnecting = false;
         isConnected = false;
         statusMessage = "Errore di connessione";
       });
+      _updateLiveStatus("Errore: Impossibile stabilire il link Bluetooth con l'adattatore", StatusType.error);
     }
   }
 
@@ -135,6 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       connectedDeviceName = "";
       ecuResponseInfo = "Nessuna ECU interrogata";
     });
+    _updateLiveStatus("Bluetooth disconnesso correttamente", StatusType.info);
   }
 
   void disconnectEcu() {
@@ -144,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       selectedEcu = "Nessuna";
       ecuResponseInfo = "ECU disconnessa";
     });
+    _updateLiveStatus("Centralina disconnessa. Sistema in idle.", StatusType.info);
   }
 
   void connectToSelectedEcu(String ecuName) async {
@@ -154,13 +196,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       profile.dtcVal = "---";
       ecuResponseInfo = "Connessione 29-bit a $ecuName...";
     });
-    await obd.initEcuChannel(id);
-    String part = await profile.readHardwarePartCode(obd);
-    if (mounted) {
-      setState(() {
-        ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code: $part";
-      });
+    _updateLiveStatus("Apertura canale di comunicazione con $ecuName...", StatusType.info);
+
+    try {
+      await obd.initEcuChannel(id);
+      String part = await profile.readHardwarePartCode(obd);
+      
+      if (part == "N/D" || part.contains("ERROR")) {
+        _updateLiveStatus("Avviso: Nessuna risposta valida da $ecuName (Verifica quadro acceso)", StatusType.error);
+      } else {
+        _updateLiveStatus("Comunicazione stabile con $ecuName", StatusType.success);
+      }
+
+      if (mounted) {
+        setState(() {
+          ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code: $part";
+        });
+      }
+    } catch (_) {
+      _updateLiveStatus("Errore critico: Mancata risposta o timeout da $ecuName", StatusType.error);
     }
+
     obd.startPolling((tick) async {
       if (!isEcuConnected) return;
       await profile.pollEcu(obd, selectedEcu, tick);
@@ -170,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showEcuSelector() {
     if (!isConnected) {
+      _updateLiveStatus("Azione bloccata: Connetti prima l'adattatore Bluetooth OBD", StatusType.error);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text("Prima connetti il Bluetooth OBD!")));
       return;
@@ -244,12 +301,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800]),
             onPressed: () async {
               Navigator.pop(ctx);
+              _updateLiveStatus("Invio comando azzeramento errori (DTC)...", StatusType.info);
               String result = await profile.resetDtc(obd);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
                 setState(() {
                   profile.dtcVal = "0 (OK)";
                 });
+                _updateLiveStatus("Errori azzerati con successo sulla centralina", StatusType.success);
               }
             },
             child: const Text("Azzera Errori", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -339,56 +398,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ];
     } else if (selectedEcu == "Servosterzo") {
       return [
-        _c(Icons.compare_arrows, "Angolo Sterzo", "N/D", "°", Colors.blueAccent),
+        _c(Icons.compare_arrows, "Angolo Sterzo", profile.epsAngleVal, "°", Colors.blueAccent),
         _c(Icons.bolt, "Tensione EPS", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "ABS") {
       return [
-        _c(Icons.speed, "Velocità Ruote", "N/D", "km/h", Colors.orangeAccent),
+        _c(Icons.speed, "Velocità Ruote", profile.absSpeedVal, "km/h", Colors.orangeAccent),
         _c(Icons.bolt, "Tensione ABS", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "Airbag") {
       return [
-        _c(Icons.airline_seat_recline_normal, "Stato Cariche", "N/D", "", Colors.cyanAccent),
+        _c(Icons.airline_seat_recline_normal, "Stato Sistema", profile.airbagStatusVal, "", Colors.cyanAccent),
         _c(Icons.bolt, "Tensione SRS", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "Climatizzatore") {
       return [
-        _c(Icons.ac_unit, "Temp. Abitacolo", "N/D", "°C", Colors.lightBlueAccent),
+        _c(Icons.ac_unit, "Temp. Abitacolo", profile.hvacTempVal, "°C", Colors.lightBlueAccent),
         _c(Icons.bolt, "Tensione HVAC", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "Radio / Uconnect") {
       return [
-        _c(Icons.radio, "Stato Sistema", "N/D", "", Colors.amber),
+        _c(Icons.radio, "Stato Sistema", profile.radioStatusVal, "", Colors.amber),
         _c(Icons.bolt, "Tensione Radio", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "Sensori di Parcheggio") {
       return [
-        _c(Icons.sensors, "Distanza Ostacoli", "N/D", "cm", Colors.tealAccent),
+        _c(Icons.sensors, "Distanza Ostacoli", profile.pamDistVal, "cm", Colors.tealAccent),
         _c(Icons.bolt, "Tensione PAM", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     } else if (selectedEcu == "Cruise Control") {
       return [
-        _c(Icons.add_road, "Stato Cruise", "N/D", "", Colors.greenAccent),
+        _c(Icons.add_road, "Stato Cruise", profile.accStatusVal, "", Colors.greenAccent),
         _c(Icons.bolt, "Tensione ACC", profile.param1Val, "V", Colors.purpleAccent),
         _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
         dtcWidget,
       ];
     }
     
-    // Fallback di sicurezza per eventuali altre centraline future
     return [
       _c(Icons.bolt, "Tensione Linea ECU", profile.param1Val, "V", Colors.purpleAccent),
       _c(Icons.info, "VIN / Identificativo", profile.param2Val, "", Colors.greenAccent),
@@ -510,6 +568,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            // NUOVA BARRA DI STATO DINAMICA (Live Status Banner)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: liveStatusColor.withOpacity(0.6), width: 1),
+              ),
+              child: Row(
+                children: [
+                  Icon(liveStatusIcon, color: liveStatusColor, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      liveStatusText,
+                      style: TextStyle(color: liveStatusColor, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             if (isEcuConnected) ...[
               Container(
                 width: double.infinity,
@@ -585,3 +666,5 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
+enum StatusType { info, success, error }
