@@ -10,7 +10,7 @@ class StellantisProfile {
     "ABS": "28",
     "Servosterzo": "30",
     "Airbag": "51",
-    "Climatizzatore": "68",
+    "Climatizzatore": "3A", // ID CAN corretto per modulo HVAC Fiat
     "Radio / Uconnect": "62",
     "Sensori di Parcheggio": "76",
     "Cruise Control": "7A",
@@ -26,6 +26,9 @@ class StellantisProfile {
   String coolantVal = "---", oilVal = "---", iatVal = "---", catalystVal = "---", oilLifeVal = "---";
   String bcmIbsSocVal = "---", bcmBatteryVoltVal = "---";
   String ipcRangeVal = "---", ipcTpmsVal = "---", ipcServiceKmVal = "---", ipcAvgConsVal = "---", ipcVoltVal = "---";
+  
+  String epsAngleVal = "---", absSpeedVal = "---", airbagStatusVal = "---";
+  String hvacTempVal = "---", radioStatusVal = "---", pamDistVal = "---", accStatusVal = "---";
 
   List<int> bytes(String raw, String m1, [String? m2, String? m3]) {
     try {
@@ -57,14 +60,7 @@ class StellantisProfile {
       List<int> a = b.sublist(2).where((x) => x >= 32 && x <= 126).toList();
       if (a.isNotEmpty) return String.fromCharCodes(a).trim();
     }
-    try {
-      List<int> bAlt = bytes(raw, "62");
-      if (bAlt.isNotEmpty) {
-        return String.fromCharCodes(bAlt.where((x) => x >= 32 && x <= 126)).trim();
-      }
-    } catch (_) {}
-    String cl = raw.replaceAll(">", "").replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-    return (cl.isEmpty || cl.contains("NO DATA") || cl.contains("7F")) ? "N/D" : cl;
+    return "N/D";
   }
 
   String parseVolt(String r) {
@@ -87,9 +83,7 @@ class StellantisProfile {
     for (int x in b) {
       if (x > 0 && x < 250 && x != 128 && x != 4) {
         int temp = x - 40;
-        if (temp >= -30 && temp <= 60) {
-          return temp.toString();
-        }
+        if (temp >= -30 && temp <= 60) return temp.toString();
       }
     }
     return null;
@@ -126,10 +120,7 @@ class StellantisProfile {
         List<String> codes = [];
         for (int i = 0; i < dtcCount; i++) {
           int offset = 2 + (i * 4);
-          if (offset + 2 < dB.length) {
-            String code = _decodeDtc(dB[offset], dB[offset+1], dB[offset+2]);
-            codes.add("• $code");
-          }
+          if (offset + 2 < dB.length) codes.add("• " + _decodeDtc(dB[offset], dB[offset+1], dB[offset+2]));
         }
         dtcDetails = codes.isNotEmpty ? codes.join("\n") : "Errore nella decodifica dei codici.";
       }
@@ -183,17 +174,11 @@ class StellantisProfile {
       }
     } else {
       List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
-      if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
-        rawFuel = fB[0].toDouble();
-      }
+      if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) rawFuel = fB[0].toDouble();
     }
 
     if (rawFuel != null) {
-      if (_smoothedFuelPct == null) {
-        _smoothedFuelPct = rawFuel;
-      } else {
-        _smoothedFuelPct = (_smoothedFuelPct! * 0.90) + (rawFuel * 0.10);
-      }
+      _smoothedFuelPct = _smoothedFuelPct == null ? rawFuel : (_smoothedFuelPct! * 0.90) + (rawFuel * 0.10);
       fuelVal = _smoothedFuelPct!.round().toString();
     }
 
@@ -225,8 +210,17 @@ class StellantisProfile {
     }
   }
 
+  Future<void> _readGenericEcuInfo(ObdService obd, int tick) async {
+    param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
+    if (param2Val == "---" || param2Val == "N/D") {
+       param2Val = decodeAscii(await obd.queryObd("22 F1 87\r", timeoutMs: 250));
+    }
+    if (tick % 4 == 0) await _updateDtc(obd);
+  }
+
   Future<void> pollEcu(ObdService obd, String selectedEcu, int tick) async {
     String curId = ecuIds[selectedEcu] ?? "10";
+    
     if (selectedEcu == "Centralina Motore (ECU)") {
       List<int> bC = bytes(await obd.queryObd("010C\r", timeoutMs: 120), "41", "0C");
       if (bC.length >= 2) rpmVal = (((bC[0] * 256) + bC[1]) / 4).round().toString();
@@ -352,11 +346,40 @@ class StellantisProfile {
         await _updateDtc(obd);
         ipcTpmsVal = dtcVal == "0 (OK)" ? "Regolare" : dtcVal;
       }
+    } else if (selectedEcu == "Servosterzo") {
+      List<int> bA = bytes(await obd.queryObd("22 15 05\r", timeoutMs: 140), "62", "15", "05");
+      if (bA.length >= 2) {
+        double angle = (((bA[0] * 256) + bA[1]) - 32768) / 10.0;
+        epsAngleVal = angle.toStringAsFixed(1);
+      }
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "ABS") {
+      List<int> bS = bytes(await obd.queryObd("22 10 42\r", timeoutMs: 140), "62", "10", "42");
+      if (bS.length >= 2) absSpeedVal = (((bS[0] * 256) + bS[1]) / 100.0).toStringAsFixed(1);
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "Airbag") {
+      List<int> bSt = bytes(await obd.queryObd("22 10 01\r", timeoutMs: 140), "62", "10", "01");
+      airbagStatusVal = bSt.isNotEmpty ? "OK / Armato" : "---";
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "Climatizzatore") {
+      // Lettura Temperatura Evaporatore / Abitacolo HVAC
+      List<int> bT = bytes(await obd.queryObd("22 11 02\r", timeoutMs: 140), "62", "11", "02");
+      if (bT.isNotEmpty) hvacTempVal = (bT[0] - 40).toString();
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "Radio / Uconnect") {
+      List<int> bR = bytes(await obd.queryObd("22 10 10\r", timeoutMs: 140), "62", "10", "10");
+      radioStatusVal = bR.isNotEmpty ? "Acceso / OK" : "---";
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "Sensori di Parcheggio") {
+      List<int> bP = bytes(await obd.queryObd("22 12 01\r", timeoutMs: 140), "62", "12", "01");
+      if (bP.isNotEmpty && bP[0] < 255) pamDistVal = (bP[0] * 2).toString();
+      await _readGenericEcuInfo(obd, tick);
+    } else if (selectedEcu == "Cruise Control") {
+      List<int> bC = bytes(await obd.queryObd("22 13 01\r", timeoutMs: 140), "62", "13", "01");
+      accStatusVal = bC.isNotEmpty ? "Disponibile" : "---";
+      await _readGenericEcuInfo(obd, tick);
     } else {
-      param1Val = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      param2Val = decodeAscii(await obd.queryObd("22 F1 90\r", timeoutMs: 180));
-      param3Val = param2Val != "N/D" ? "Comunicazione OK" : "Attiva";
-      if (tick % 3 == 0) await _updateDtc(obd);
+      await _readGenericEcuInfo(obd, tick);
     }
   }
 }
