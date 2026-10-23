@@ -112,6 +112,12 @@ class StellantisProfile {
     }
   }
 
+  // Aggiunto per soddisfare la chiamata in main.dart
+  Future<String> resetDtc(ObdService obd) async {
+    String res = await obd.queryObd("14 00 00\r", timeoutMs: 300);
+    return res.contains("54") ? "Errori azzerati con successo" : "Comando inviato / Risposta: $res";
+  }
+
   Future<void> _updateShared(ObdService obd, String curId) async {
     List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
     if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
