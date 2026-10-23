@@ -158,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String part = await profile.readHardwarePartCode(obd);
     if (mounted) {
       setState(() {
-        ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code:$part";
+        ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code: $part";
       });
     }
     obd.startPolling((tick) async {
@@ -325,11 +325,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isFiat = selectedBrand == "Fiat/Stellantis";
     return Scaffold(
       appBar: AppBar(
-          title: const Text('FRU SCAN',
-              style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true),
+        title: const Text('FRU SCAN',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(10.0),
         child: Column(
@@ -448,5 +449,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
                       childAspectRatio: 1.45,
-                      children: _cardsForEcu())
-                  
+                      children: _cardsForEcu(),
+                    )
+                  : Center(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFF161A1D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.withOpacity(0.3))),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
+                            SizedBox(height: 12),
+                            Text(
+                                "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
