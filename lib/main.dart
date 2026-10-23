@@ -168,6 +168,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Popup interattivo per la gestione e il reset dei DTC
+  void _showDtcDetailDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161A1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text("Diagnostica Errori (DTC) - $selectedEcu",
+            style: const TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Stato attuale: ${profile.dtcVal}", style: const TextStyle(color: Colors.white, fontSize: 14)),
+            const SizedBox(height: 12),
+            const Text("Premi il tasto sottostante per azzerare i codici errore memorizzati nella centralina.",
+                style: TextStyle(color: Colors.grey, fontSize: 13)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800], foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => profile.dtcVal = "Azzeramento...");
+              String result = await profile.resetDtc(obd);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+            },
+            child: const Text("Resetta Errori (Clear)"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showEcuSelector() {
     if (!isConnected) {
       ScaffoldMessenger.of(context)
@@ -214,41 +253,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _c(IconData ic, String title, String val, String unit, Color col) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-            color: const Color(0xFF161A1D),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(ic, color: col, size: 24),
-            const SizedBox(height: 4),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 12, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(val, style: TextStyle(color: col, fontSize: 22, fontWeight: FontWeight.bold)),
-                  if (unit.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    Text(unit, style: TextStyle(color: col, fontSize: 15, fontWeight: FontWeight.bold))
+  Widget _c(IconData ic, String title, String val, String unit, Color col, {VoidCallback? onTap}) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+              color: const Color(0xFF161A1D),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(ic, color: col, size: 24),
+              const SizedBox(height: 4),
+              Text(title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(val, style: TextStyle(color: col, fontSize: 22, fontWeight: FontWeight.bold)),
+                    if (unit.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Text(unit, style: TextStyle(color: col, fontSize: 15, fontWeight: FontWeight.bold))
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
 
   List<Widget> _cardsForEcu() {
+    Widget dtcCard = _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", Colors.redAccent, onTap: _showDtcDetailDialog);
+
     if (selectedEcu == "Centralina Motore (ECU)") {
       return [
         _c(Icons.speed, "Giri Motore", profile.rpmVal, "RPM", Colors.orangeAccent),
@@ -257,11 +301,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _c(Icons.local_gas_station, "Carburante Residuo", profile.fuelVal, "%", Colors.amber),
         _c(Icons.bolt, "Tensione Batteria", profile.batteryVal, "V", Colors.purpleAccent),
         _c(Icons.thermostat, "Temp. Refrigerante", profile.coolantVal, "°C", Colors.blueAccent),
-        _c(Icons.water_drop, "Temp. Olio", profile.oilVal, "°C", Colors.amber),
-        _c(Icons.air, "Temp. Aria Aspirata", profile.iatVal, "°C", Colors.tealAccent),
-        _c(Icons.local_fire_department, "Temp. Catalizzatore", profile.catalystVal, "°C", Colors.deepOrangeAccent),
         _c(Icons.opacity, "Vita Restante Olio", profile.oilLifeVal, "%", Colors.lightGreenAccent),
-        _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", Colors.redAccent),
+        dtcCard,
       ];
     } else if (selectedEcu == "Body Computer") {
       return [
@@ -270,7 +311,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _c(Icons.pin_drop, "Contachilometri (Odo)", profile.odoVal, "km", Colors.blueAccent),
         _c(Icons.local_gas_station, "Carburante Residuo", profile.fuelVal, "%", Colors.amber),
         _c(Icons.thermostat, "Temperatura Esterna", profile.extTempVal, "°C", Colors.cyanAccent),
-        _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", Colors.redAccent),
+        dtcCard,
       ];
     } else if (selectedEcu == "Quadro Strumenti") {
       return [
@@ -278,17 +319,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _c(Icons.route, "Autonomia Carburante", profile.ipcRangeVal, "km", Colors.orangeAccent),
         _c(Icons.thermostat, "Temperatura Esterna", profile.extTempVal, "°C", Colors.cyanAccent),
         _c(Icons.build, "Service", profile.ipcServiceKmVal, "km", Colors.deepOrangeAccent),
-        _c(Icons.eco, "Consumo Medio", profile.ipcAvgConsVal, "km/l", Colors.lightGreenAccent),
         _c(Icons.bolt, "Tensione Quadro", profile.ipcVoltVal, "V", Colors.purpleAccent),
         _c(Icons.tire_repair, "Pressione Gomme (TPMS)", profile.ipcTpmsVal, "", Colors.greenAccent),
-        _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", Colors.redAccent),
+        dtcCard,
       ];
     }
     return [
       _c(Icons.bolt, "Tensione Linea ECU", profile.param1Val, "V", Colors.purpleAccent),
       _c(Icons.info, "VIN / Identificativo", profile.param2Val, "", Colors.greenAccent),
       _c(Icons.check_circle_outline, "Stato Connessione", profile.param3Val, "", Colors.cyanAccent),
-      _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", Colors.redAccent),
+      dtcCard,
     ];
   }
 
