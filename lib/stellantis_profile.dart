@@ -115,6 +115,7 @@ class StellantisProfile {
   }
 
   Future<void> _updateShared(ObdService obd, String curId) async {
+    // Gestione carburante stabilizzata per evitare sfarfallii dovuti a letture a vuoto
     List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
     if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
       _fuelPct = fB[0].toDouble();
@@ -190,7 +191,8 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "03"], ["38", "1A"]]) {
+        // Corretto recupero della vita restante olio motore (supporto esteso DID Stellantis)
+        for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "03"], ["38", "1A"], ["22", "11"]]) {
           List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
           if (b.isNotEmpty) {
             int v = -1;
@@ -209,7 +211,9 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["40", "24"], ["19", "35"], ["03", "02"], ["19", "36"], ["21", "15"]]) {
+      
+      // Corretta lettura della carica batteria IBS sul Body Computer
+      for (var d in [["40", "24"], ["19", "35"], ["03", "02"], ["19", "36"], ["21", "15"], ["40", "16"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
         if (b.isNotEmpty) {
           for (int x in b) {
@@ -227,19 +231,21 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Quadro Strumenti") {
       ipcVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
+      
+      // Corretta logica e parsing dei chilometri/giorni al service del Quadro Strumenti
       for (var d in [["21", "01"], ["20", "10"], ["20", "11"], ["F1", "C2"], ["19", "20"]]) {
         List<int> sB = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 150), "62", d[0], d[1]);
         if (sB.length >= 2) {
           int kmVal = -1;
           int? daysVal;
           int rawWord = (sB[0] * 256) + sB[1];
-          if (rawWord <= 15000) kmVal = rawWord;
-          else if (rawWord > 15000 && rawWord <= 150000) kmVal = rawWord ~/ 10;
+          if (rawWord <= 30000) kmVal = rawWord;
+          else if (rawWord > 30000 && rawWord <= 300000) kmVal = rawWord ~/ 10;
           else if (sB.length >= 4) {
             int alt = (sB[2] * 256) + sB[3];
-            if (alt >= 0 && alt <= 15000) kmVal = alt;
+            if (alt >= 0 && alt <= 30000) kmVal = alt;
           }
-          if (kmVal >= 0 && kmVal <= 15000) {
+          if (kmVal >= 0 && kmVal <= 50000) {
             if (sB.length >= 4) {
               int dC = (sB[2] * 256) + sB[3];
               if (dC > 0 && dC <= 730) daysVal = dC;
@@ -248,7 +254,7 @@ class StellantisProfile {
                 if (dAlt >= 0 && dAlt <= 730) daysVal = dAlt;
               }
             }
-            ipcServiceKmVal = daysVal != null ? "$kmVal/15000 ($daysVal gg)" : "$kmVal/15000";
+            ipcServiceKmVal = daysVal != null ? "$kmVal km ($daysVal gg)" : "$kmVal km";
             break;
           }
         }
