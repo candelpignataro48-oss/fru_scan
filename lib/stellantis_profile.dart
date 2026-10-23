@@ -13,10 +13,7 @@ class StellantisProfile {
     "Climatizzatore": "68",
     "Radio / Uconnect": "62",
     "Sensori di Parcheggio": "76",
-    "Radar / ACC": "7A",
     "Cruise Control": "7A",
-    "Blind Spot": "B8",
-    "Telecamere": "72",
   };
 
   String fuelVal = "---", odoVal = "---", extTempVal = "---", dtcVal = "---";
@@ -112,7 +109,6 @@ class StellantisProfile {
     }
   }
 
-  // Aggiunto per soddisfare la chiamata in main.dart
   Future<String> resetDtc(ObdService obd) async {
     String res = await obd.queryObd("14 00 00\r", timeoutMs: 300);
     return res.contains("54") ? "Errori azzerati con successo" : "Comando inviato / Risposta: $res";
