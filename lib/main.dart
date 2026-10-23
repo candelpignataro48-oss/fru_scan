@@ -174,9 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .showSnackBar(const SnackBar(content: Text("Prima connetti il Bluetooth OBD!")));
       return;
     }
-    final keys = profile.ecuIds.keys
-        .where((k) => k != "Telecamere" && k != "Radar / ACC" && k != "Blind Spot")
-        .toList();
+    final keys = profile.ecuIds.keys.toList();
 
     showModalBottomSheet(
       context: context,
