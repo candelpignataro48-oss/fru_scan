@@ -17,6 +17,7 @@ class StellantisProfile {
   };
 
   String fuelVal = "---", odoVal = "---", extTempVal = "---", dtcVal = "---";
+  String dtcDetails = "In attesa dei dettagli...";
   double? _smoothedFuelPct, _avgKml;
   int? _odoKm;
 
@@ -98,25 +99,76 @@ class StellantisProfile {
     return decodeAscii(await obd.queryObd("22 F1 87\r", timeoutMs: 280));
   }
 
+  String _decodeDtc(int b1, int b2, [int? b3]) {
+    const prefixes = ["P", "C", "B", "U"];
+    String prefix = prefixes[(b1 >> 6) & 0x03];
+    String d1 = ((b1 >> 4) & 0x03).toString();
+    String d2 = (b1 & 0x0F).toRadixString(16).toUpperCase();
+    String d3 = ((b2 >> 4) & 0x0F).toRadixString(16).toUpperCase();
+    String d4 = (b2 & 0x0F).toRadixString(16).toUpperCase();
+    String code = "$prefix$d1$d2$d3$d4";
+    if (b3 != null) {
+      String faultType = b3.toRadixString(16).padLeft(2, '0').toUpperCase();
+      return "$code-$faultType";
+    }
+    return code;
+  }
+
   Future<void> _updateDtc(ObdService obd, {bool isEng = false}) async {
     List<int> dB = bytes(await obd.queryObd("19 02 09\r", timeoutMs: 170), "59", "02");
-    if (dB.isNotEmpty) {
-      int c = (dB.length - 1) ~/ 4;
-      dtcVal = c <= 0 ? "0 (OK)" : "$c Errori";
+    if (dB.isNotEmpty && dB[0] == 0x09) {
+      int dtcCount = (dB.length - 2) ~/ 4;
+      if (dtcCount <= 0) {
+        dtcVal = "0 (OK)";
+        dtcDetails = "Nessun errore rilevato in questa centralina.";
+      } else {
+        dtcVal = "$dtcCount Errori";
+        List<String> codes = [];
+        for (int i = 0; i < dtcCount; i++) {
+          int offset = 2 + (i * 4);
+          if (offset + 2 < dB.length) {
+            String code = _decodeDtc(dB[offset], dB[offset+1], dB[offset+2]);
+            codes.add("• $code");
+          }
+        }
+        dtcDetails = codes.isNotEmpty ? codes.join("\n") : "Errore nella decodifica dei codici.";
+      }
       return;
     }
+    
     if (isEng) {
       List<int> m1 = bytes(await obd.queryObd("0101\r", timeoutMs: 150), "41", "01");
       if (m1.isNotEmpty) {
         int c = m1[0] & 0x7F;
-        dtcVal = c == 0 ? "0 (OK)" : "$c Errori";
+        if (c == 0) {
+          dtcVal = "0 (OK)";
+          dtcDetails = "Nessun errore rilevato (Lettura Base OBD2).";
+        } else {
+          dtcVal = "$c Errori";
+          List<int> mode3 = bytes(await obd.queryObd("03\r", timeoutMs: 150), "43");
+          if (mode3.isNotEmpty) {
+            List<String> m3codes = [];
+            for(int i = 0; i < mode3.length - 1; i += 2) {
+              if (mode3[i] == 0 && mode3[i+1] == 0) continue;
+              m3codes.add("• " + _decodeDtc(mode3[i], mode3[i+1]));
+            }
+            dtcDetails = m3codes.isNotEmpty ? m3codes.join("\n") : "Rilevati $c errori. Codici non disponibili.";
+          } else {
+            dtcDetails = "Rilevati $c errori.\nNon è stato possibile leggerne i dettagli.";
+          }
+        }
       }
     }
   }
 
   Future<String> resetDtc(ObdService obd) async {
     String res = await obd.queryObd("14 00 00\r", timeoutMs: 300);
-    return res.contains("54") ? "Errori azzerati con successo" : "Comando inviato / Risposta: $res";
+    if (res.contains("54")) {
+      dtcVal = "0 (OK)";
+      dtcDetails = "Nessun errore rilevato in questa centralina.";
+      return "Errori azzerati con successo";
+    }
+    return "Comando inviato / Risposta: $res";
   }
 
   Future<void> _updateShared(ObdService obd, String curId) async {
