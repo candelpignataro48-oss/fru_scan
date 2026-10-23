@@ -120,46 +120,44 @@ class StellantisProfile {
   }
 
   Future<void> _updateShared(ObdService obd, String curId) async {
-    List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
-    if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
-      _fuelPct = fB[0].toDouble();
-      fuelVal = fB[0].toString();
-    } else {
-      if (curId != "10") await obd.setChan("10");
+    if (curId == "10") {
       List<int> obdF = bytes(await obd.queryObd("012F\r", timeoutMs: 140), "41", "2F");
       if (obdF.isNotEmpty && obdF[0] >= 0) {
         _fuelPct = (obdF[0] * 100.0) / 255.0;
         fuelVal = _fuelPct!.round().toString();
+      } else {
+        List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
+        if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) fuelVal = fB[0].toString();
       }
-      if (curId != "10") await obd.setChan(curId);
+    } else {
+      List<int> fB = bytes(await obd.queryObd("22 20 05\r", timeoutMs: 140), "62", "20", "05");
+      if (fB.isNotEmpty && fB[0] >= 0 && fB[0] <= 100) {
+        _fuelPct = fB[0].toDouble();
+        fuelVal = fB[0].toString();
+      }
     }
 
     String? vT;
-    if (curId != "10") await obd.setChan("10");
-    vT = _extT(bytes(await obd.queryObd("0146\r", timeoutMs: 140), "41", "46"));
-    vT ??= _extT(bytes(await obd.queryObd("22 F4 46\r", timeoutMs: 140), "62", "F4", "46"));
-    if (curId != "10") await obd.setChan(curId);
-    if (vT == null) {
-      for (var d in [["19", "24"], ["20", "03"], ["10", "04"]]) {
-        vT = _extT(bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]));
-        if (vT != null) break;
+    if (curId == "10") {
+      vT = _extT(bytes(await obd.queryObd("0146\r", timeoutMs: 140), "41", "46"));
+    } else {
+      vT = _extT(bytes(await obd.queryObd("22 F4 46\r", timeoutMs: 140), "62", "F4", "46"));
+      if (vT == null) {
+        for (var d in [["19", "24"], ["20", "03"], ["10", "04"]]) {
+          vT = _extT(bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]));
+          if (vT != null) break;
+        }
       }
     }
     if (vT != null) extTempVal = vT;
 
     int? odo = _calcOdo(bytes(await obd.queryObd("22 20 01\r", timeoutMs: 160), "62", "20", "01"));
-    if (odo == null) {
-      if (curId != "60") await obd.setChan("60");
-      odo = _calcOdo(bytes(await obd.queryObd("22 20 01\r", timeoutMs: 160), "62", "20", "01"));
-      if (odo == null) {
-        await obd.setChan("10");
-        List<int> bA6 = bytes(await obd.queryObd("01A6\r", timeoutMs: 160), "41", "A6");
-        if (bA6.length >= 4) {
-          int raw = (bA6[0] * 16777216) + (bA6[1] * 65536) + (bA6[2] * 256) + bA6[3];
-          if (raw > 0) odo = raw ~/ 10;
-        }
+    if (odo == null && curId == "10") {
+      List<int> bA6 = bytes(await obd.queryObd("01A6\r", timeoutMs: 160), "41", "A6");
+      if (bA6.length >= 4) {
+        int raw = (bA6[0] * 16777216) + (bA6[1] * 65536) + (bA6[2] * 256) + bA6[3];
+        if (raw > 0) odo = raw ~/ 10;
       }
-      await obd.setChan(curId);
     }
     if (odo != null && odo > 0) {
       _odoKm = odo;
@@ -195,7 +193,7 @@ class StellantisProfile {
         await _updateShared(obd, "10");
         await _updateDtc(obd, isEng: true);
 
-        for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "03"], ["38", "1A"], ["22", "11"]]) {
+        for (var d in [["18", "08"], ["18", "82"], ["19", "42"], ["19", "06"], ["38", "1A"], ["22", "11"], ["10", "43"]]) {
           List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
           if (b.isNotEmpty) {
             int v = -1;
@@ -203,6 +201,7 @@ class StellantisProfile {
               int raw16 = (b[0] * 256) + b[1];
               if (raw16 >= 0 && raw16 <= 100) v = raw16;
               else if (raw16 > 100 && raw16 <= 1000) v = raw16 ~/ 10;
+              else if (raw16 > 1000 && raw16 <= 10000) v = raw16 ~/ 100;
             }
             if (v == -1 && b[0] >= 0 && b[0] <= 100) v = b[0];
             if (v >= 0 && v <= 100) {
@@ -214,11 +213,11 @@ class StellantisProfile {
       }
     } else if (selectedEcu == "Body Computer") {
       bcmBatteryVoltVal = parseVolt(await obd.queryObd("ATRV\r", timeoutMs: 120));
-      for (var d in [["40", "24"], ["19", "35"], ["03", "02"], ["19", "36"], ["21", "15"], ["40", "16"]]) {
+      for (var d in [["40", "2A"], ["40", "24"], ["19", "35"], ["40", "2B"], ["03", "02"], ["21", "15"]]) {
         List<int> b = bytes(await obd.queryObd("22 ${d[0]} ${d[1]}\r", timeoutMs: 140), "62", d[0], d[1]);
         if (b.isNotEmpty) {
           for (int x in b) {
-            if (x >= 0 && x <= 100) {
+            if (x > 0 && x <= 100) {
               bcmIbsSocVal = x.toString();
               break;
             }
@@ -237,12 +236,14 @@ class StellantisProfile {
         if (sB.length >= 2) {
           int kmVal = -1;
           int? daysVal;
-          int rawWord = (sB[0] * 256) + sB[1];
-          if (rawWord <= 30000) kmVal = rawWord;
-          else if (rawWord > 30000 && rawWord <= 300000) kmVal = rawWord ~/ 10;
-          else if (sB.length >= 4) {
-            int alt = (sB[2] * 256) + sB[3];
-            if (alt >= 0 && alt <= 30000) kmVal = alt;
+          if (sB.length >= 3 && d[0] == "21") {
+            int raw24 = (sB[0] * 65536) + (sB[1] * 256) + sB[2];
+            if (raw24 <= 50000) kmVal = raw24;
+          }
+          if (kmVal == -1) {
+            int rawWord = (sB[0] * 256) + sB[1];
+            if (rawWord <= 30000) kmVal = rawWord;
+            else if (rawWord > 30000 && rawWord <= 300000) kmVal = rawWord ~/ 10;
           }
           if (kmVal >= 0 && kmVal <= 50000) {
             if (sB.length >= 4) {
@@ -253,7 +254,7 @@ class StellantisProfile {
                 if (dAlt >= 0 && dAlt <= 730) daysVal = dAlt;
               }
             }
-            ipcServiceKmVal = daysVal != null ? "$kmVal km ($daysVal gg)" : "$kmVal km";
+            ipcServiceKmVal = daysVal != null ? "$kmVal/15000 ($daysVal gg)" : "$kmVal/15000";
             break;
           }
         }
@@ -267,19 +268,6 @@ class StellantisProfile {
         if (v > 2.0 && v < 40.0) {
           _avgKml = v;
           ipcAvgConsVal = v.toStringAsFixed(1);
-        }
-      } else {
-        await obd.setChan("10");
-        List<int> spdB = bytes(await obd.queryObd("010D\r", timeoutMs: 120), "41", "0D");
-        List<int> mafB = bytes(await obd.queryObd("0110\r", timeoutMs: 120), "41", "10");
-        await obd.setChan("60");
-        if (spdB.isNotEmpty && mafB.length >= 2) {
-          double spd = spdB[0].toDouble(), lph = (((mafB[0] * 256) + mafB[1]) / 100.0) * 0.3287;
-          if (spd > 3.0 && lph > 0.2) {
-            double kml = (spd / lph).clamp(3.0, 35.0);
-            _avgKml = _avgKml == null ? kml : (_avgKml! * 0.85 + kml * 0.15);
-            ipcAvgConsVal = _avgKml!.toStringAsFixed(1);
-          }
         }
       }
       List<int> rB = bytes(await obd.queryObd("22 20 07\r", timeoutMs: 140), "62", "20", "07");
