@@ -27,27 +27,27 @@ class StellantisProfile {
     "Cruise Control": "21"
   };
 
-  Future<String> readHardwarePartCode(ObdService obd) async {
+  Future<String> readHardwarePartCode(ObdService obd, String ecu) async {
     String res = await obd.queryObd("22 F1 87\r");
-    if (_isError(res)) {
+    // Se la centralina rifiuta il comando UDS, tentiamo il Mode 09 SOLO se è la centralina motore
+    if ((res.contains("7F") || res.contains("NO DATA")) && ecu == "Centralina Motore (ECU)") {
       res = await obd.queryObd("09 02\r");
     }
-    param2Val = _parseAscii(res);
-    return param2Val.isEmpty ? "N/D" : param2Val;
+    String val = _parseAscii(res);
+    return val.isEmpty ? "N/D" : val;
   }
 
   Future<String> resetDtc(ObdService obd) async {
     String res = await obd.queryObd("14 FF FF FF\r");
-    if (_isError(res)) return "Errore durante l'azzeramento";
+    if (res.contains("NO DATA") || res.contains("7F") && !res.contains("78")) {
+      return "Errore durante l'azzeramento";
+    }
     dtcVal = "0 (OK)";
     return "Comando reset inviato con successo";
   }
 
-  bool _isError(String data) {
-    return data.contains("NO DATA") || data.contains("7F") || data.contains("ERROR") || data.contains("STOPPED");
-  }
-
   Future<void> pollEcu(ObdService obd, String ecu, int tick) async {
+    // Lettura errori ogni 5 cicli
     if (tick % 5 == 0) {
       String dtc = await obd.queryObd("19 02 09\r");
       _parseDtc(dtc);
@@ -56,79 +56,35 @@ class StellantisProfile {
     if (ecu == "Centralina Motore (ECU)") {
       rpmVal = _parse(await obd.queryObd("01 0C\r"), (a, b) => (a * 256 + b) / 4, rpmVal, decimals: 0);
       speedVal = _parse(await obd.queryObd("01 0D\r"), (a, b) => a.toDouble(), speedVal, decimals: 0);
-      turboVal = _parse(await obd.queryObd("01 0B\r"), (a, b) => (a - 100) / 100, "1.0", decimals: 2);
-      fuelVal = _parse(await obd.queryObd("01 2F\r"), (a, b) => a * 100 / 255, "50", decimals: 0);
+      turboVal = _parse(await obd.queryObd("01 0B\r"), (a, b) => (a - 100) / 100, turboVal, decimals: 2);
+      fuelVal = _parse(await obd.queryObd("01 2F\r"), (a, b) => a * 100 / 255, fuelVal, decimals: 0);
+      coolantVal = _parse(await obd.queryObd("01 05\r"), (a, b) => a - 40.0, coolantVal, decimals: 0);
+      oilVal = _parse(await obd.queryObd("01 5C\r"), (a, b) => a - 40.0, oilVal, decimals: 0);
+      iatVal = _parse(await obd.queryObd("01 0F\r"), (a, b) => a - 40.0, iatVal, decimals: 0);
+      catalystVal = _parse(await obd.queryObd("01 3C\r"), (a, b) => ((a * 256 + b) / 10) - 40.0, catalystVal, decimals: 0);
       batteryVal = _parse(await obd.queryObd("ATRV\r"), null, batteryVal, isVolt: true);
-      coolantVal = _parse(await obd.queryObd("01 05\r"), (a, b) => a - 40.0, "90", decimals: 0);
-      oilVal = _parse(await obd.queryObd("01 5C\r"), (a, b) => a - 40.0, "95", decimals: 0);
-      iatVal = _parse(await obd.queryObd("01 0F\r"), (a, b) => a - 40.0, "25", decimals: 0);
-      catalystVal = _parse(await obd.queryObd("01 3C\r"), (a, b) => ((a * 256 + b) / 10) - 40.0, "400", decimals: 0);
-      oilLifeVal = "100";
     } 
-    else if (ecu == "Body Computer") {
-      bcmIbsSocVal = "95";
-      bcmBatteryVoltVal = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      odoVal = "45200";
-      extTempVal = "21";
-    } 
-    else if (ecu == "Quadro Strumenti") {
-      fuelVal = _parse(await obd.queryObd("01 2F\r"), (a, b) => a * 100 / 255, "50", decimals: 0);
-      ipcRangeVal = "600";
-      extTempVal = "21";
-      ipcServiceKmVal = "15000";
-      ipcVoltVal = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      ipcTpmsVal = "OK";
-    } 
-    else if (ecu == "ABS") {
-      absSpeedValue(await obd);
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-ABS-01";
-    } 
-    else if (ecu == "Servosterzo") {
-      if (param2Val == "---" || param2Val == "N/D") await readHardwarePartCode(obd);
-      epsAngleVal = "0.0";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-    } 
-    else if (ecu == "Airbag") {
-      airbagStatusVal = "OK";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-SRS-01";
-    }
-    else if (ecu == "Climatizzatore") {
-      hvacTempVal = "21.0";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-HVAC-01";
-    }
-    else if (ecu == "Radio / Uconnect") {
-      radioStatusVal = "Attivo";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "UCONNECT-01";
-    }
-    else if (ecu == "Sensori di Parcheggio") {
-      pamDistVal = "--";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-PAM-01";
-    }
-    else if (ecu == "Cruise Control") {
-      accStatusVal = "Standby";
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-ACC-01";
-    }
     else {
-      param1Val = _parse(await obd.queryObd("ATRV\r"), null, "12.2", isVolt: true);
-      param2Val = "FCA-ECU-GEN";
+      // PER TUTTE LE ALTRE CENTRALINE (Evita l'errore 7F 01 11 bloccante)
+      // Leggiamo solo la tensione generica e l'Hardware ID se assente
+      if (param2Val == "---" || param2Val == "N/D") {
+        param2Val = await readHardwarePartCode(obd, ecu);
+      }
+      String volt = _parse(await obd.queryObd("ATRV\r"), null, "---", isVolt: true);
+      param1Val = volt;
+
+      // Aggiorna le card di tensione specifiche in base alla centralina selezionata
+      if (ecu == "Body Computer") bcmBatteryVoltVal = volt;
+      if (ecu == "Quadro Strumenti") ipcVoltVal = volt;
+      
       param3Val = "Connesso";
     }
   }
 
-  Future<void> absSpeedValue(ObdService obd) async {
-    String spd = _parse(await obd.queryObd("01 0D\r"), (a, b) => a.toDouble(), "0", decimals: 0);
-    absSpeedVal = spd;
-  }
-
   String _parse(String data, double Function(int, int)? formula, String def, {bool isVolt = false, int decimals = 1}) {
+    if (data.contains("NO DATA") || data.contains("STOPPED")) return def;
     if (isVolt && data.contains("V")) return data.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (_isError(data)) return def;
+    if (data.contains("7F")) return def; // Richiesta non supportata
     
     data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
     data = data.replaceAll(RegExp(r'\s+'), ' ');
@@ -151,7 +107,7 @@ class StellantisProfile {
   }
 
   String _parseAscii(String data) {
-    if (_isError(data)) return "";
+    if (data.contains("NO DATA") || data.contains("STOPPED") || data.contains("7F")) return "";
     data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
     data = data.replaceAll(RegExp(r'\s+'), ' ');
     List<String> hex = data.split(" ");
@@ -167,13 +123,33 @@ class StellantisProfile {
   }
 
   void _parseDtc(String data) {
-    if (_isError(data)) {
-      dtcVal = "0 (OK)";
-      dtcDetails = "Nessun codice errore rilevato.";
+    if (data.contains("NO DATA") || data.contains("STOPPED")) {
+      dtcVal = "---";
+      dtcDetails = "Nessuna risposta.";
       return;
     }
-    dtcVal = "Rilevati";
-    dtcDetails = data;
+
+    // Pulizia dei byte
+    List<String> hex = data.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('>', ' ').split(RegExp(r'\s+'));
+    hex.removeWhere((e) => e.isEmpty);
+    
+    int idx = hex.indexOf("59");
+    if (idx != -1 && hex.length > idx + 1 && hex[idx+1] == "02") {
+      // Se la risposta è corta (es. 59 02 4F), non ci sono DTC
+      if (hex.length <= idx + 3) {
+        dtcVal = "0 (OK)";
+        dtcDetails = "Nessun codice errore rilevato.";
+      } else {
+        dtcVal = "Rilevati";
+        dtcDetails = data;
+      }
+    } else if (data.contains("7F 19")) {
+      dtcVal = "---";
+      dtcDetails = "Lettura momentaneamente non disponibile.";
+    } else {
+      dtcVal = "---";
+      dtcDetails = "Formato dati sconosciuto.";
+    }
   }
 }
 // === FINE DEL CODICE ===
