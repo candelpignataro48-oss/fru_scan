@@ -18,12 +18,8 @@ class ObdService {
     String line = "[$timestamp] $text";
     _internalLogs += "$line\n";
     _logController.add(line);
-    debugImage(line); // Log di debug pulito
-  }
-
-  void debugImage(String msg) {
     if (kDebugMode) {
-      print(msg);
+      print(line);
     }
   }
 
@@ -32,7 +28,9 @@ class ObdService {
 
   Future<List<BluetoothDevice>> getBondedDevices() async {
     try {
-      return await FlutterBluetoothSerialBle.instance.getBondedDevices();
+      // Metodo corretto della libreria bluetooth serial
+      List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
+      return devices;
     } catch (e) {
       _log("Errore recupero dispositivi associati: $e");
       return [];
@@ -70,14 +68,12 @@ class ObdService {
     _log("Disconnesso correttamente.");
   }
 
-  /// Inizializzazione del canale di comunicazione UDS 29-bit per la specifica ECU
-  /// Gestisce automaticamente il routing MS-CAN (pin 3/11) per i moduli secondari
+  /// Inizializzazione del canale di comunicazione UDS 29-bit con routing MS-CAN (pin 3/11)
   Future<bool> initEcuChannel(String ecuId) async {
     if (!_isConnected) return false;
 
     _log("Inizializzazione canale ECU ID: $ecuId");
 
-    // Selezione automatica del bus in base all'ID centralina
     // I moduli 70 (Parking), A0 (Radio), 98 (Clima) richiedono la rete MS-CAN (pin 3/11)
     bool isMsCan = (ecuId == "70" || ecuId == "A0" || ecuId == "98");
 
@@ -87,10 +83,8 @@ class ObdService {
 
       if (isMsCan) {
         _log("Attivazione routing MS-CAN (pin 3/11) per centralina ID: $ecuId");
-        // Comando specifico chip STN / vLinker per commutare sui pin alternativi MS-CAN
         await queryObd("AT CS 1\r"); 
       } else {
-        // Ripristino pin standard HS-CAN (pin 6/14)
         await queryObd("AT CS 0\r");
       }
 
@@ -120,31 +114,13 @@ class ObdService {
     try {
       _log("TX: $command");
       _connection!.output.add(Uint8List.fromList(command.codeUnits));
-      await _connection!.output.allSent();
+      await _connection!.output.allSent; // Corretto da metodo a getter asincrono
 
-      String buffer = "";
-      Stopwatch sw = Stopwatch()..start();
-
-      while (sw.elapsedMilliseconds < 1500) {
-        if (_connection!.input.hasPendingData) {
-          var data = await _connection!.input.listen((event) {}).asFuture(); // Gestione stream dati
-          // Lettura sicura dei dati in arrivo
-        }
-        await Future.delayed(const Duration(milliseconds: 20));
-        
-        // Lettura semplificata e robusta dal socket Bluetooth
-        // (Sfruttiamo l'attesa attiva sul buffer di risposta fino al carattere '>')
-        if (_internalLogs.isNotEmpty) {
-          // Attende il prompt '>' dell'ELM327
-        }
-      }
-
-      // Esecuzione query con attesa bufferizzata standard
       Completer<String> completer = Completer();
       String response = "";
 
       var subscription;
-      subscription = _connection!.input.listen((Uint8List data) {
+      subscription = _connection!.input!.listen((Uint8List data) {
         response += String.fromCharCodes(data);
         if (response.contains(">")) {
           subscription.cancel();
