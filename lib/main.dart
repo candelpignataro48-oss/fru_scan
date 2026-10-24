@@ -45,7 +45,7 @@ class _FruScanHomeState extends State<FruScanHome> {
   @override
   void initState() {
     super.initState();
-    _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
+    _selectedEcuId = null;
     _loadDevices();
   }
 
@@ -79,7 +79,8 @@ class _FruScanHomeState extends State<FruScanHome> {
       if (success && _selectedEcuId != null) {
         await _obdService.initEcuChannel(_selectedEcuId!);
       }
-    } catch (_) {
+    } catch (e) {
+      setState(() => _isConnecting = false);
       return;
     }
   }
@@ -105,8 +106,12 @@ class _FruScanHomeState extends State<FruScanHome> {
 
   @override
   Widget build(BuildContext context) {
+    // Controllo di sicurezza: resetta o assegna automaticamente la ECU se cambia marca o è nulla
     if (_selectedEcuId != null && !currentEcuIds.containsKey(_selectedEcuId)) {
       _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
+    }
+    if (_selectedEcuId == null && currentEcuIds.keys.isNotEmpty) {
+      _selectedEcuId = currentEcuIds.keys.first;
     }
 
     return Scaffold(
@@ -161,12 +166,19 @@ class _FruScanHomeState extends State<FruScanHome> {
                     );
                   }).toList(),
                   onChanged: (val) {
-                    setState(() {
-                      _selectedBrand = val!;
-                      _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
-                    });
-                    if (_obdService.isConnected && _selectedEcuId != null) {
-                      _obdService.initEcuChannel(_selectedEcuId!);
+                    if (val != null) {
+                      setState(() {
+                        _selectedBrand = val;
+                        _selectedEcuId = null; // Forza il ricalcolo al primo render
+                      });
+                      if (_obdService.isConnected) {
+                        String? newEcu = _selectedBrand == "Citroën" 
+                            ? PsaProfile.ecuIds.keys.first 
+                            : StellantisProfile.ecuIds.keys.first;
+                        if (newEcu != null) {
+                          _obdService.initEcuChannel(newEcu);
+                        }
+                      }
                     }
                   },
                 ),
@@ -231,3 +243,4 @@ class _FruScanHomeState extends State<FruScanHome> {
     );
   }
 }
+// Fix applicato: risolta l'integrità del layout e delle chiamate ai profili.
