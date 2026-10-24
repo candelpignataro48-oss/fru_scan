@@ -60,6 +60,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _showInfoMenu() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161A1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 22),
+            SizedBox(width: 8),
+            Text("Informazioni & Compatibilità",
+                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Fru Scan",
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("Applicazione di diagnostica avanzata dedicata ai veicoli del gruppo Stellantis.",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              SizedBox(height: 12),
+              Text("Sviluppatore / Autore:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              Text("Fru\nVersione: 1.0.0 (Release)",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              Divider(color: Colors.grey, height: 24),
+              Text("Adattatori Bluetooth Compatibili:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              SizedBox(height: 6),
+              Text(
+                "• vLinker MC / vLinker BM (Consigliato: pieno supporto protocolli CAN e SW-CAN)\n\n"
+                "• OBDLink MX+ / OBDLink CX\n\n"
+                "• Interfacce ELM327 originali o cloni di qualità basati su chip PIC18F25K80",
+                style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB74D),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogsModal() {
     showDialog(
       context: context,
@@ -380,16 +436,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- FUNZIONE PER IL CALCOLO DEL COLORE DEL "LED" IN ALTO A DESTRA ---
   Color _getLedColor(String title, String val) {
-    if (val == "---" || val == "N/D" || val.isEmpty) return Colors.grey; // Dati non disponibili
+    if (val == "---" || val == "N/D" || val.isEmpty) return Colors.grey;
     
     if (title.contains("Errori")) {
       return (val == "0 (OK)") ? Colors.greenAccent : Colors.redAccent;
     }
 
     try {
-      // Estrae solo il numero eliminando le lettere
       double numVal = double.parse(val.replaceAll(RegExp(r'[^0-9.-]'), ''));
       
       if (title.contains("Tensione")) {
@@ -413,9 +467,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Colors.greenAccent;
       }
       
-      return Colors.greenAccent; // Valori standard (es. Velocità/RPM)
+      return Colors.greenAccent;
     } catch (e) {
-      return Colors.greenAccent; // In caso di testo non parsiabile (es. OK)
+      return Colors.greenAccent;
     }
   }
 
@@ -432,7 +486,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
         child: Stack(
           children: [
-            // LED Indicatore in alto a destra
             Positioned(
               top: 0,
               right: 2,
@@ -452,7 +505,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            // Contenuto principale
             Align(
               alignment: Alignment.center,
               child: Column(
@@ -622,6 +674,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isFiat = selectedBrand == "Fiat/Stellantis";
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.info_outline, color: Color(0xFFFFB74D)),
+          onPressed: _showInfoMenu,
+          tooltip: "Informazioni e Compatibilità",
+        ),
         title: const Text('FRU SCAN',
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
         backgroundColor: Colors.transparent,
