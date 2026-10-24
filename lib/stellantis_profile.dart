@@ -29,16 +29,16 @@ class StellantisProfile {
   };
 
   Future<String> readHardwarePartCode(ObdService obd) async {
-    String res = await obd.sendCommand("22 F1 87");
+    String res = await obd.queryObd("22 F1 87\r");
     if (_isError(res)) {
-      res = await obd.sendCommand("09 02");
+      res = await obd.queryObd("09 02\r");
     }
     param2Val = _parseAscii(res);
     return param2Val.isEmpty ? "N/D" : param2Val;
   }
 
   Future<String> resetDtc(ObdService obd) async {
-    String res = await obd.sendCommand("14 FF FF FF");
+    String res = await obd.queryObd("14 FF FF FF\r");
     if (_isError(res)) return "Errore durante l'azzeramento";
     dtcVal = "0 (OK)";
     return "Comando reset inviato con successo";
@@ -50,43 +50,38 @@ class StellantisProfile {
 
   Future<void> pollEcu(ObdService obd, String ecu, int tick) async {
     if (tick % 5 == 0) {
-      String dtc = await obd.sendCommand("19 02 09");
+      String dtc = await obd.queryObd("19 02 09\r");
       _parseDtc(dtc);
     }
 
     if (ecu == "Centralina Motore (ECU)") {
-      rpmVal = _parse(await obd.sendCommand("01 0C"), (a, b) => (a * 256 + b) / 4, rpmVal);
-      speedVal = _parse(await obd.sendCommand("01 0D"), (a, b) => a.toDouble(), speedVal);
-      coolantVal = _parse(await obd.sendCommand("01 05"), (a, b) => a - 40.0, coolantVal);
-      // Corretto PID usura olio FCA UDS
-      oilLifeVal = _parseUds(await obd.sendCommand("22 10 3B"), (a, b) => (a * 100) / 255, oilLifeVal);
-      batteryVal = _parse(await obd.sendCommand("ATRV"), null, batteryVal, isVolt: true);
+      rpmVal = _parse(await obd.queryObd("01 0C\r"), (a, b) => (a * 256 + b) / 4, rpmVal);
+      speedVal = _parse(await obd.queryObd("01 0D\r"), (a, b) => a.toDouble(), speedVal);
+      coolantVal = _parse(await obd.queryObd("01 05\r"), (a, b) => a - 40.0, coolantVal);
+      oilLifeVal = _parseUds(await obd.queryObd("22 10 3B\r"), (a, b) => (a * 100) / 255, oilLifeVal);
+      batteryVal = _parse(await obd.queryObd("ATRV\r"), null, batteryVal, isVolt: true);
     } 
     else if (ecu == "Body Computer") {
-      // Corretto PID IBS FCA UDS
-      bcmIbsSocVal = _parseUds(await obd.sendCommand("22 20 02"), (a, b) => a.toDouble(), bcmIbsSocVal);
-      odoVal = _parseUds(await obd.sendCommand("22 13 01"), (a, b) => (a * 65536 + b * 256) / 10, odoVal);
-      bcmBatteryVoltVal = _parse(await obd.sendCommand("ATRV"), null, bcmBatteryVoltVal, isVolt: true);
+      bcmIbsSocVal = _parseUds(await obd.queryObd("22 20 02\r"), (a, b) => a.toDouble(), bcmIbsSocVal);
+      odoVal = _parseUds(await obd.queryObd("22 13 01\r"), (a, b) => (a * 65536 + b * 256) / 10, odoVal);
+      bcmBatteryVoltVal = _parse(await obd.queryObd("ATRV\r"), null, bcmBatteryVoltVal, isVolt: true);
     } 
     else if (ecu == "Quadro Strumenti") {
-      // Corretto PID Service FCA UDS
-      ipcServiceKmVal = _parseUds(await obd.sendCommand("22 15 01"), (a, b) => (a * 256 + b) * 10, ipcServiceKmVal);
-      fuelVal = _parse(await obd.sendCommand("01 2F"), (a, b) => a * 100 / 255, fuelVal);
-      ipcVoltVal = _parse(await obd.sendCommand("ATRV"), null, ipcVoltVal, isVolt: true);
+      ipcServiceKmVal = _parseUds(await obd.queryObd("22 15 01\r"), (a, b) => (a * 256 + b) * 10, ipcServiceKmVal);
+      fuelVal = _parse(await obd.queryObd("01 2F\r"), (a, b) => a * 100 / 255, fuelVal);
+      ipcVoltVal = _parse(await obd.queryObd("ATRV\r"), null, ipcVoltVal, isVolt: true);
     } 
     else if (ecu == "ABS") {
-      // Corretto PID velocità ruote FCA UDS
-      absSpeedVal = _parseUds(await obd.sendCommand("22 10 18"), (a, b) => (a * 256 + b) / 100, absSpeedVal);
-      param1Val = _parse(await obd.sendCommand("ATRV"), null, param1Val, isVolt: true);
+      absSpeedVal = _parseUds(await obd.queryObd("22 10 18\r"), (a, b) => (a * 256 + b) / 100, absSpeedVal);
+      param1Val = _parse(await obd.queryObd("ATRV\r"), null, param1Val, isVolt: true);
     } 
     else if (ecu == "Servosterzo") {
       if (param2Val == "---" || param2Val == "N/D") await readHardwarePartCode(obd);
-      // Corretto PID Angolo Sterzo FCA UDS
-      epsAngleVal = _parseUds(await obd.sendCommand("22 10 11"), (a, b) => ((a * 256 + b) - 32768) * 0.1, epsAngleVal);
-      param1Val = _parse(await obd.sendCommand("ATRV"), null, param1Val, isVolt: true);
+      epsAngleVal = _parseUds(await obd.queryObd("22 10 11\r"), (a, b) => ((a * 256 + b) - 32768) * 0.1, epsAngleVal);
+      param1Val = _parse(await obd.queryObd("ATRV\r"), null, param1Val, isVolt: true);
     } 
     else {
-      param1Val = _parse(await obd.sendCommand("ATRV"), null, param1Val, isVolt: true);
+      param1Val = _parse(await obd.queryObd("ATRV\r"), null, param1Val, isVolt: true);
       param3Val = "Connesso";
     }
   }
