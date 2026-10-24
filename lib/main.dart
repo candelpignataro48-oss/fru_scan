@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 import 'obd_service.dart';
-import 'stellantis_profile.dart';
-import 'psa_profile.dart';
+import 'stellantis_profile.dart'; 
+import 'psa_profile.dart'; 
 
 void main() {
   runApp(const FruScanApp());
@@ -34,7 +34,7 @@ class FruScanHome extends StatefulWidget {
 class _FruScanHomeState extends State<FruScanHome> {
   final ObdService _obdService = ObdService();
   List<BluetoothDevice> _devices = [];
-  BluetoothDevice? _selectedDevice;
+  String? _selectedDeviceAddress; 
   
   String _selectedBrand = "Fiat";
   String? _selectedEcuId;
@@ -45,6 +45,7 @@ class _FruScanHomeState extends State<FruScanHome> {
   @override
   void initState() {
     super.initState();
+    _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
     _loadDevices();
   }
 
@@ -53,7 +54,7 @@ class _FruScanHomeState extends State<FruScanHome> {
     setState(() {
       _devices = devices;
       if (_devices.isNotEmpty) {
-        _selectedDevice = _devices.first;
+        _selectedDeviceAddress = _devices.first.address;
       }
     });
   }
@@ -66,12 +67,21 @@ class _FruScanHomeState extends State<FruScanHome> {
   }
 
   Future<void> _connect() async {
-    if (_selectedDevice == null) return;
+    if (_selectedDeviceAddress == null) return;
     
+    // Recupera l'oggetto dispositivo dall'indirizzo selezionato
+    BluetoothDevice? deviceToConnect;
+    try {
+      deviceToConnect = _devices.firstWhere((d) => d.address == _selectedDeviceAddress);
+    } catch (_) {
+      return;
+    }
+
     setState(() => _isConnecting = true);
-    bool success = await _obdService.connectToDevice(_selectedDevice!);
+    bool success = await _obdService.connectToDevice(deviceToConnect);
     setState(() => _isConnecting = false);
     
+    // Inizializza il canale solo se abbiamo una ECU valida
     if (success && _selectedEcuId != null) {
       await _obdService.initEcuChannel(_selectedEcuId!);
     }
@@ -98,6 +108,11 @@ class _FruScanHomeState extends State<FruScanHome> {
 
   @override
   Widget build(BuildContext context) {
+    // Sicurezza per la tendina ECU: se il valore selezionato non fa parte della lista attuale, lo resetta
+    if (_selectedEcuId != null && !currentEcuIds.containsKey(_selectedEcuId)) {
+      _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Fru Scan - Diagnostica'),
@@ -107,15 +122,15 @@ class _FruScanHomeState extends State<FruScanHome> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButton<BluetoothDevice>(
+            DropdownButton<String>(
               isExpanded: true,
-              value: _selectedDevice,
+              value: _selectedDeviceAddress,
               hint: const Text("Seleziona dispositivo Bluetooth"),
-              items: _devices.map((d) => DropdownMenuItem(
-                value: d,
+              items: _devices.map((d) => DropdownMenuItem<String>(
+                value: d.address,
                 child: Text(d.name ?? d.address),
               )).toList(),
-              onChanged: (val) => setState(() => _selectedDevice = val),
+              onChanged: (val) => setState(() => _selectedDeviceAddress = val),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -154,9 +169,9 @@ class _FruScanHomeState extends State<FruScanHome> {
             ),
             DropdownButton<String>(
               isExpanded: true,
-              value: _selectedEcuId ?? (currentEcuIds.isNotEmpty ? currentEcuIds.keys.first : null),
+              value: _selectedEcuId,
               hint: const Text("Seleziona Centralina"),
-              items: currentEcuIds.entries.map((e) => DropdownMenuItem(
+              items: currentEcuIds.entries.map((e) => DropdownMenuItem<String>(
                 value: e.key,
                 child: Text("${e.key} - ${e.value}"),
               )).toList(),
