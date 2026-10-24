@@ -30,6 +30,7 @@ class FruScanHome extends StatefulWidget {
   @override
   State<FruScanHome> createState() => _FruScanHomeState();
 }
+
 class _FruScanHomeState extends State<FruScanHome> {
   final ObdService _obdService = ObdService();
   List<BluetoothDevice> _devices = [];
@@ -63,6 +64,7 @@ class _FruScanHomeState extends State<FruScanHome> {
     }
     return StellantisProfile.ecuIds;
   }
+
   Future<void> _connect() async {
     if (_selectedDevice == null) return;
     
@@ -88,12 +90,12 @@ class _FruScanHomeState extends State<FruScanHome> {
       setState(() => _isPolling = false);
     } else {
       _obdService.startPolling((tick) async {
-        // Invio di una richiesta dati generica o calcolata sui PID
         await _obdService.queryObd("22 F1 87\r"); 
       });
       setState(() => _isPolling = true);
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -141,10 +143,8 @@ class _FruScanHomeState extends State<FruScanHome> {
                   onChanged: (val) {
                     setState(() {
                       _selectedBrand = val!;
-                      // Imposta di default la prima ECU della marca scelta
                       _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
                     });
-                    // Se siamo già connessi, reinizializza subito il canale
                     if (_obdService.isConnected && _selectedEcuId != null) {
                       _obdService.initEcuChannel(_selectedEcuId!);
                     }
@@ -207,4 +207,3 @@ class _FruScanHomeState extends State<FruScanHome> {
     );
   }
 }
-// fine del codice
