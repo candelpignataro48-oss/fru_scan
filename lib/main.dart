@@ -52,6 +52,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _showInfoModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161A1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Informazioni e Compatibilità",
+            style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text(
+          "Fru Scan - App di Diagnostica Veicoli\n\n"
+          "• Protocolli supportati: Fiat/Stellantis (29-bit) e Citroën/PSA (11-bit).\n"
+          "• Hardware consigliato: Adattatore Bluetooth OBD (es. vLinker MC+).\n"
+          "• Assicurati di avere il quadro dell'auto acceso prima di interrogare le centraline.",
+          style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFB74D), foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogsModal() {
     showDialog(
       context: context,
@@ -322,9 +349,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isFiat = selectedBrand == "Fiat/Stellantis";
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.info_outline, color: Color(0xFFFFB74D)),
+          onPressed: _showInfoModal,
+          tooltip: "Informazioni e Compatibilità",
+        ),
         title: const Text('FRU SCAN', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
         backgroundColor: Colors.transparent, centerTitle: true,
-        actions: [IconButton(icon: const Icon(Icons.settings, color: Color(0xFFFFB74D)), onPressed: _showLogsModal)],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Color(0xFFFFB74D)),
+            onPressed: _showLogsModal,
+            tooltip: "Log di Diagnostica",
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(10.0),
