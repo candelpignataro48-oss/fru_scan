@@ -380,42 +380,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _c(IconData ic, String title, String val, String unit, Color col, {VoidCallback? onTap}) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(
-              color: const Color(0xFF161A1D),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(ic, color: col, size: 24),
-              const SizedBox(height: 4),
-              Text(title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 12, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(val, style: TextStyle(color: col, fontSize: 22, fontWeight: FontWeight.bold)),
-                    if (unit.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      Text(unit, style: TextStyle(color: col, fontSize: 15, fontWeight: FontWeight.bold))
-                    ],
-                  ],
+  // --- FUNZIONE PER IL CALCOLO DEL COLORE DEL "LED" IN ALTO A DESTRA ---
+  Color _getLedColor(String title, String val) {
+    if (val == "---" || val == "N/D" || val.isEmpty) return Colors.grey; // Dati non disponibili
+    
+    if (title.contains("Errori")) {
+      return (val == "0 (OK)") ? Colors.greenAccent : Colors.redAccent;
+    }
+
+    try {
+      // Estrae solo il numero eliminando le lettere
+      double numVal = double.parse(val.replaceAll(RegExp(r'[^0-9.-]'), ''));
+      
+      if (title.contains("Tensione")) {
+        if (numVal < 11.8 || numVal > 15.2) return Colors.redAccent;
+        if (numVal < 12.2) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Temp. Refrigerante") {
+        if (numVal > 110) return Colors.redAccent;
+        if (numVal >= 100) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Temp. Olio") {
+        if (numVal > 130) return Colors.redAccent;
+        if (numVal >= 115) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Carburante Residuo" || title == "Vita Restante Olio") {
+        if (numVal <= 10) return Colors.redAccent;
+        if (numVal <= 20) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      
+      return Colors.greenAccent; // Valori standard (es. Velocità/RPM)
+    } catch (e) {
+      return Colors.greenAccent; // In caso di testo non parsiabile (es. OK)
+    }
+  }
+
+  Widget _c(IconData ic, String title, String val, String unit, Color col, {VoidCallback? onTap}) {
+    Color ledColor = _getLedColor(title, val);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+            color: const Color(0xFF161A1D),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
+        child: Stack(
+          children: [
+            // LED Indicatore in alto a destra
+            Positioned(
+              top: 0,
+              right: 2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: ledColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: ledColor.withOpacity(0.6),
+                      blurRadius: 5,
+                      spreadRadius: 1,
+                    )
+                  ]
                 ),
               ),
-            ],
-          ),
+            ),
+            // Contenuto principale
+            Align(
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(ic, color: col, size: 24),
+                  const SizedBox(height: 4),
+                  Text(title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(val, style: TextStyle(color: col, fontSize: 22, fontWeight: FontWeight.bold)),
+                        if (unit.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Text(unit, style: TextStyle(color: col, fontSize: 15, fontWeight: FontWeight.bold))
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
   List<Widget> _cardsForEcu() {
     Color dtcColor = (profile.dtcVal == "0 (OK)" || profile.dtcVal == "---") ? Colors.greenAccent : Colors.redAccent;
