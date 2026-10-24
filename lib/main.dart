@@ -122,6 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
   void _showLogsModal() {
     showDialog(
       context: context,
@@ -228,41 +229,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             height: 300,
             child: devs.isEmpty
                 ? const Center(
+                    child: Text("Nessun dispositivo associato.",
+                        textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)))
+                : ListView.builder(
+                    itemCount: devs.length,
+                    itemBuilder: (c, i) => ListTile(
+                      leading: const Icon(Icons.bluetooth, color: Color(0xFFFFB74D)),
+                      title: Text(devs[i].name ?? "Dispositivo",
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      subtitle: Text(devs[i].address, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        connectToDevice(devs[i]);
+                      },
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _updateLiveStatus("Connessione annullata dall'utente", StatusType.info);
+                },
+                child: const Text("Annulla", style: TextStyle(color: Colors.grey)))
+          ],
+        ),
+      );
+    } catch (_) {
+      setState(() {
+        isConnecting = false;
+        statusMessage = "Errore scansione Bluetooth";
+      });
+      _updateLiveStatus("Errore: Impossibile completare la scansione Bluetooth", StatusType.error);
+    }
+  }
 
-child: Text("Nessun dispositivo associato.",
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)))
-            : ListView.builder(
-                itemCount: devs.length,
-                itemBuilder: (c, i) => ListTile(
-                  leading: const Icon(Icons.bluetooth, color: Color(0xFFFFB74D)),
-                  title: Text(devs[i].name ?? "Dispositivo",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  subtitle: Text(devs[i].address, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    connectToDevice(devs[i]);
-                  },
-                ),
-              ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _updateLiveStatus("Connessione annullata dall'utente", StatusType.info);
-            },
-            child: const Text("Annulla", style: TextStyle(color: Colors.grey)))
-      ],
-    ),
-  );
-} catch (_) {
-  setState(() {
-    isConnecting = false;
-    statusMessage = "Errore scansione Bluetooth";
-  });
-  _updateLiveStatus("Errore: Impossibile completare la scansione Bluetooth", StatusType.error);
-}
-}
   void connectToDevice(BluetoothDevice d) async {
     setState(() {
       isConnecting = true;
@@ -347,6 +348,7 @@ child: Text("Nessun dispositivo associato.",
       if (mounted) setState(() {});
     });
   }
+
   void _showEcuSelector() {
     if (!isConnected) {
       _updateLiveStatus("Azione bloccata: Connetti prima l'adattatore Bluetooth OBD", StatusType.error);
@@ -440,3 +442,431 @@ child: Text("Nessun dispositivo associato.",
       ),
     );
   }
+
+  Color _getLedColor(String title, String val) {
+    if (val == "---" || val == "N/D" || val.isEmpty) return Colors.grey;
+    
+    if (title.contains("Errori")) {
+      return (val == "0 (OK)") ? Colors.greenAccent : Colors.redAccent;
+    }
+
+    try {
+      double numVal = double.parse(val.replaceAll(RegExp(r'[^0-9.-]'), ''));
+      
+      if (title.contains("Tensione")) {
+        if (numVal < 11.8 || numVal > 15.2) return Colors.redAccent;
+        if (numVal < 12.2) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Temp. Refrigerante") {
+        if (numVal > 110) return Colors.redAccent;
+        if (numVal >= 100) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Temp. Olio") {
+        if (numVal > 130) return Colors.redAccent;
+        if (numVal >= 115) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      if (title == "Carburante Residuo" || title == "Vita Restante Olio") {
+        if (numVal <= 10) return Colors.redAccent;
+        if (numVal <= 20) return Colors.orangeAccent;
+        return Colors.greenAccent;
+      }
+      
+      return Colors.greenAccent;
+    } catch (e) {
+      return Colors.greenAccent;
+    }
+  }
+
+  Widget _c(IconData ic, String title, String val, String unit, Color col, {VoidCallback? onTap}) {
+    Color ledColor = _getLedColor(title, val);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+            color: const Color(0xFF161A1D),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: col.withOpacity(0.9), width: 2.5)),
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              right: 2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: ledColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: ledColor.withOpacity(0.6),
+                      blurRadius: 5,
+                      spreadRadius: 1,
+                    )
+                  ]
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(ic, color: col, size: 24),
+                  const SizedBox(height: 4),
+                  Text(title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(val, style: TextStyle(color: col, fontSize: 22, fontWeight: FontWeight.bold)),
+                        if (unit.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Text(unit, style: TextStyle(color: col, fontSize: 15, fontWeight: FontWeight.bold))
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _cardsForEcu() {
+    Color dtcColor = (profile.dtcVal == "0 (OK)" || profile.dtcVal == "---") ? Colors.greenAccent : Colors.redAccent;
+    Widget dtcWidget = _c(Icons.shield_outlined, "Errori Rilevati (DTC)", profile.dtcVal, "", dtcColor, onTap: () {
+      if (profile.dtcVal != "0 (OK)" && profile.dtcVal != "---") {
+        _showDtcDetails();
+      }
+    });
+
+    if (selectedEcu == "Centralina Motore (ECU)") {
+      return [
+        _c(Icons.speed, "Giri Motore", profile.rpmVal, "RPM", Colors.orangeAccent),
+        _c(Icons.directions_car, "Velocità", profile.speedVal, "km/h", Colors.greenAccent),
+        _c(Icons.compress, "Pressione Turbina", profile.turboVal, "bar", Colors.cyanAccent),
+        _c(Icons.local_gas_station, "Carburante Residuo", profile.fuelVal, "%", Colors.amber),
+        _c(Icons.bolt, "Tensione Batteria", profile.batteryVal, "V", Colors.purpleAccent),
+        _c(Icons.thermostat, "Temp. Refrigerante", profile.coolantVal, "°C", Colors.blueAccent),
+        _c(Icons.water_drop, "Temp. Olio", profile.oilVal, "°C", Colors.amber),
+        _c(Icons.air, "Temp. Aria Aspirata", profile.iatVal, "°C", Colors.tealAccent),
+        _c(Icons.local_fire_department, "Temp. Catalizzatore", profile.catalystVal, "°C", Colors.deepOrangeAccent),
+        _c(Icons.opacity, "Vita Restante Olio", profile.oilLifeVal, "%", Colors.lightGreenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Body Computer") {
+      return [
+        _c(Icons.battery_charging_full, "Carica Batteria (IBS)", profile.bcmIbsSocVal, "%", Colors.greenAccent),
+        _c(Icons.bolt, "Tensione BCM", profile.bcmBatteryVoltVal, "V", Colors.purpleAccent),
+        _c(Icons.pin_drop, "Contachilometri (Odo)", profile.odoVal, "km", Colors.blueAccent),
+        _c(Icons.local_gas_station, "Carburante Residuo", profile.fuelVal, "%", Colors.amber),
+        _c(Icons.thermostat, "Temperatura Esterna", profile.extTempVal, "°C", Colors.cyanAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Quadro Strumenti") {
+      return [
+        _c(Icons.local_gas_station, "Carburante Residuo", profile.fuelVal, "%", Colors.amber),
+        _c(Icons.route, "Autonomia Carburante", profile.ipcRangeVal, "km", Colors.orangeAccent),
+        _c(Icons.thermostat, "Temperatura Esterna", profile.extTempVal, "°C", Colors.cyanAccent),
+        _c(Icons.build, "Service", profile.ipcServiceKmVal, "km", Colors.deepOrangeAccent),
+        _c(Icons.bolt, "Tensione Quadro", profile.ipcVoltVal, "V", Colors.purpleAccent),
+        _c(Icons.tire_repair, "Pressione Gomme (TPMS)", profile.ipcTpmsVal, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Servosterzo") {
+      return [
+        _c(Icons.compare_arrows, "Angolo Sterzo", profile.epsAngleVal, "°", Colors.blueAccent),
+        _c(Icons.bolt, "Tensione EPS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "ABS") {
+      return [
+        _c(Icons.speed, "Velocità Ruote", profile.absSpeedVal, "km/h", Colors.orangeAccent),
+        _c(Icons.bolt, "Tensione ABS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Airbag") {
+      return [
+        _c(Icons.airline_seat_recline_normal, "Stato Sistema", profile.airbagStatusVal, "", Colors.cyanAccent),
+        _c(Icons.bolt, "Tensione SRS", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Climatizzatore") {
+      return [
+        _c(Icons.ac_unit, "Temp. Abitacolo", profile.hvacTempVal, "°C", Colors.lightBlueAccent),
+        _c(Icons.bolt, "Tensione HVAC", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Radio / Uconnect") {
+      return [
+        _c(Icons.radio, "Stato Sistema", profile.radioStatusVal, "", Colors.amber),
+        _c(Icons.bolt, "Tensione Radio", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Sensori di Parcheggio") {
+      return [
+        _c(Icons.sensors, "Distanza Ostacoli", profile.pamDistVal, "cm", Colors.tealAccent),
+        _c(Icons.bolt, "Tensione PAM", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    } else if (selectedEcu == "Cruise Control") {
+      return [
+        _c(Icons.add_road, "Stato Cruise", profile.accStatusVal, "", Colors.greenAccent),
+        _c(Icons.bolt, "Tensione ACC", profile.param1Val, "V", Colors.purpleAccent),
+        _c(Icons.info, "Hardware ID", profile.param2Val, "", Colors.greenAccent),
+        dtcWidget,
+      ];
+    }
+
+    return [
+      _c(Icons.bolt, "Tensione Linea ECU", profile.param1Val, "V", Colors.purpleAccent),
+      _c(Icons.info, "VIN / Identificativo", profile.param2Val, "", Colors.greenAccent),
+      _c(Icons.check_circle_outline, "Stato Connessione", profile.param3Val, "", Colors.cyanAccent),
+      dtcWidget,
+    ];
+  }
+
+  Widget _ddBox(String label, String? val, List<String> items, ValueChanged<String?>? onChg) => Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+              color: const Color(0xFF161A1D),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFFB74D).withOpacity(0.6), width: 1.2)),
+          child: Row(
+            children: [
+              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: val,
+                    hint: const Text("Nessuno", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    isExpanded: true,
+                    dropdownColor: const Color(0xFF161A1D),
+                    style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold),
+                    items: items.map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
+                    onChanged: onChg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    bool isFiat = selectedBrand == "Fiat/Stellantis";
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.info_outline, color: Color(0xFFFFB74D)),
+          onPressed: _showInfoMenu,
+          tooltip: "Informazioni e Compatibilità",
+        ),
+        title: const Text('FRU SCAN',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFFFFB74D))),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Color(0xFFFFB74D)),
+            onPressed: _showLogsModal,
+            tooltip: "Log di Diagnostica",
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: const Color(0xFF161A1D),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.withOpacity(0.3))),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                          color: isConnected ? Colors.greenAccent : Colors.orangeAccent, size: 16),
+                      const SizedBox(width: 6),
+                      Text(isConnected ? "Connesso a: $connectedDeviceName" : "Stato: $statusMessage",
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: isConnected ? Colors.red[800] : const Color(0xFFFFB74D),
+                              foregroundColor: isConnected ? Colors.white : Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 8)),
+                          onPressed:
+                              isConnecting ? null : (isConnected ? disconnectBluetooth : _showBluetoothDeviceSelector),
+                          child: Text(
+                              isConnecting
+                                  ? "Connessione..."
+                                  : (isConnected ? "Disconnetti Bluetooth" : "Scegli Bluetooth"),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: isEcuConnected
+                            ? ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange[800],
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(vertical: 8)),
+                                onPressed: disconnectEcu,
+                                child: const Text("DISCONNETTI ECU",
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              )
+                            : OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFFFFB74D),
+                                    side: const BorderSide(color: Color(0xFFFFB74D), width: 1.5),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(vertical: 8)),
+                                onPressed: _showEcuSelector,
+                                icon: const Icon(Icons.settings_input_component, size: 16),
+                                label: const Text("SELEZIONA ECU",
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A1D),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: liveStatusColor.withOpacity(0.6), width: 1),
+              ),
+              child: Row(
+                children: [
+                  Icon(liveStatusIcon, color: liveStatusColor, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      liveStatusText,
+                      style: TextStyle(color: liveStatusColor, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (isEcuConnected) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFF161A1D),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.check_circle, color: Colors.greenAccent, size: 15),
+                      const SizedBox(width: 6),
+                      Text("Centralina Attiva: $selectedEcu",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold))
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(ecuResponseInfo, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              children: [
+                _ddBox("Marca:", selectedBrand, profile.brandList, (v) {
+                  setState(() {
+                    selectedBrand = v!;
+                    selectedModel = (selectedBrand == "Fiat/Stellantis") ? "Tipo Cross 1.0 T3" : "";
+                  });
+                }),
+                const SizedBox(width: 8),
+                _ddBox("Modello:", selectedModel.isEmpty ? null : selectedModel,
+                    isFiat ? ["Tipo Cross 1.0 T3"] : [], isFiat ? (v) => setState(() => selectedModel = v!) : null),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: isEcuConnected
+                  ? GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1.45,
+                      children: _cardsForEcu(),
+                    )
+                  : Center(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFF161A1D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.withOpacity(0.3))),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 40),
+                            SizedBox(height: 12),
+                            Text(
+                                "Connetti l'adattatore OBD via Bluetooth, scegli marca e modello dell'auto, e scegli la centralina a cui vuoi connetterti.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+// === FINE DEL CODICE ===
