@@ -78,35 +78,59 @@ class ObdService {
     _log("Disconnesso correttamente.");
   }
 
+  /// Inizializzazione del canale di comunicazione UDS
+  /// Gestisce automaticamente 11-bit (PSA) vs 29-bit (Fiat) e il routing MS-CAN
   Future<bool> initEcuChannel(String ecuId) async {
     if (!_isConnected) return false;
 
     _log("Inizializzazione canale ECU ID: $ecuId");
 
+    // I moduli 70 (Parking), A0 (Radio), 98 (Clima) richiedono la rete MS-CAN in Fiat
     bool isMsCan = (ecuId == "70" || ecuId == "A0" || ecuId == "98");
+    // Se l'ID è lungo 3 caratteri o meno (es. "7E0"), assumiamo sia architettura PSA 11-bit
+    bool is11Bit = ecuId.length <= 3;
 
     try {
-      // 1. Selezione protocollo CAN 29-bit 500k standard
-      await queryObd("AT SP 7\r");
-
-      if (isMsCan) {
-        _log("Attivazione routing MS-CAN (pin 3/11) per centralina ID: $ecuId");
-        await queryObd("AT CS 1\r"); 
+      if (is11Bit) {
+        // --- CONFIGURAZIONE CITROËN / PSA (11-bit CAN) ---
+        await queryObd("AT SP 6\r"); // Protocollo ISO 15765-4 CAN (11 bit ID, 500 kbaud)
+        await queryObd("AT CS 0\r"); // Pin standard (6/14)
+        await queryObd("AT CP 18\r"); 
+        await queryObd("AT SH $ecuId\r"); // Header di trasmissione (es. 7E0)
+        
+        // Calcola l'indirizzo di ricezione (es. 7E0 -> 7E8)
+        int rxId = int.parse(ecuId, radix: 16) + 8;
+        String rxIdHex = rxId.toRadixString(16).toUpperCase();
+        await queryObd("AT CRA $rxIdHex\r"); // Header di ricezione (es. 7E8)
+        
+        // Flow Control per 11-bit
+        await queryObd("AT FC SH $ecuId\r");
+        await queryObd("AT FC SD 30 00 00\r");
+        await queryObd("AT FC SM 1\r");
+        
       } else {
-        await queryObd("AT CS 0\r");
+        // --- CONFIGURAZIONE FIAT / STELLANTIS (29-bit CAN) ---
+        await queryObd("AT SP 7\r"); // Protocollo ISO 15765-4 CAN (29 bit ID, 500 kbaud)
+        
+        if (isMsCan) {
+          _log("Attivazione routing MS-CAN (pin 3/11) per centralina ID: $ecuId");
+          await queryObd("AT CS 1\r"); 
+        } else {
+          await queryObd("AT CS 0\r");
+        }
+
+        await queryObd("AT CP 18\r");
+        await queryObd("AT SH DA${ecuId}F1\r");
+        await queryObd("AT CRA 18DAF1$ecuId\r");
+        await queryObd("AT FC SH 18DA${ecuId}F1\r");
+        await queryObd("AT FC SD 30 00 00\r");
+        await queryObd("AT FC SM 1\r");
       }
 
-      // 2. Configurazione parametri CAN & UDS ISO-TP
-      await queryObd("AT CP 18\r");
-      await queryObd("AT SH DA${ecuId}F1\r");
-      await queryObd("AT CRA 18DAF1$ecuId\r");
-      await queryObd("AT FC SH 18DA${ecuId}F1\r");
-      await queryObd("AT FC SD 30 00 00\r");
-      await queryObd("AT FC SM 1\r");
       await queryObd("AT ST 19\r");
       await queryObd("AT AT 2\r");
 
-      // 3. Apertura sessione diagnostica estesa (UDS Service 10 03)
+      // Apertura sessione diagnostica estesa (UDS Service 10 03)
       String resp = await queryObd("10 03\r");
       _log("Canale ECU $ecuId inizializzato e pronto. Risposta: $resp");
       return true;
