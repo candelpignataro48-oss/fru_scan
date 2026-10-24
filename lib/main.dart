@@ -77,6 +77,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Fru Scan",
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("Applicazione di diagnostica avanzata dedicata ai veicoli del gruppo Stellantis.",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              SizedBox(height: 12),
+              Text("Sviluppatore / Autore:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              Text("Fru\nVersione: 1.0.0 (Release)",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              Divider(color: Colors.grey, height: 24),
+              Text("Adattatori Bluetooth Compatibili:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              SizedBox(height: 6),
+              Text(
+                "• vLinker MC / vLinker BM (Consigliato: pieno supporto protocolli CAN e SW-CAN)\n\n"
+                "• OBDLink MX+ / OBDLink CX\n\n"
+                "• Interfacce ELM327 originali o cloni di qualità basati su chip PIC18F25K80",
+                style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB74D),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogsModal() {
     showDialog(
       context: context,
@@ -144,7 +186,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     obd.disconnect();
     super.dispose();
   }
-
   void _showBluetoothDeviceSelector() async {
     setState(() {
       isConnecting = true;
@@ -302,6 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) setState(() {});
     });
   }
+
   void _showEcuSelector() {
     if (!isConnected) {
       _updateLiveStatus("Azione bloccata: Connetti prima l'adattatore Bluetooth OBD", StatusType.error);
@@ -349,7 +391,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-
   void _showDtcDetails() {
     showDialog(
       context: context,
