@@ -263,3 +263,87 @@ child: Text("Nessun dispositivo associato.",
   _updateLiveStatus("Errore: Impossibile completare la scansione Bluetooth", StatusType.error);
 }
 }
+  void connectToDevice(BluetoothDevice d) async {
+    setState(() {
+      isConnecting = true;
+      statusMessage = "Connessione a ${d.name ?? d.address}...";
+    });
+    _updateLiveStatus("Tentativo di connessione a ${d.name ?? d.address}...", StatusType.info);
+
+    bool ok = await obd.connectToDevice(d);
+    if (ok) {
+      setState(() {
+        isConnected = true;
+        isConnecting = false;
+        connectedDeviceName = d.name ?? d.address;
+        statusMessage = "Bluetooth Connesso";
+      });
+      _updateLiveStatus("Connesso a $connectedDeviceName. Scegli una centralina.", StatusType.success);
+    } else {
+      setState(() {
+        isConnecting = false;
+        isConnected = false;
+        statusMessage = "Errore di connessione";
+      });
+      _updateLiveStatus("Errore: Impossibile stabilire il link Bluetooth con l'adattatore", StatusType.error);
+    }
+  }
+
+  void disconnectBluetooth() {
+    obd.disconnect();
+    setState(() {
+      isConnected = false;
+      isEcuConnected = false;
+      selectedEcu = "Nessuna";
+      statusMessage = "Disconnesso";
+      connectedDeviceName = "";
+      ecuResponseInfo = "Nessuna ECU interrogata";
+    });
+    _updateLiveStatus("Bluetooth disconnesso correttamente", StatusType.info);
+  }
+
+  void disconnectEcu() {
+    obd.stopPolling();
+    setState(() {
+      isEcuConnected = false;
+      selectedEcu = "Nessuna";
+      ecuResponseInfo = "ECU disconnessa";
+    });
+    _updateLiveStatus("Centralina disconnessa. Sistema in idle.", StatusType.info);
+  }
+
+  void connectToSelectedEcu(String ecuName) async {
+    String id = profile.ecuIds[ecuName] ?? "10";
+    setState(() {
+      selectedEcu = ecuName;
+      isEcuConnected = true;
+      profile.dtcVal = "---";
+      ecuResponseInfo = "Connessione 29-bit a $ecuName...";
+    });
+    _updateLiveStatus("Apertura canale di comunicazione con $ecuName...", StatusType.info);
+
+    try {
+      await obd.initEcuChannel(id);
+      String part = await profile.readHardwarePartCode(obd, ecuName); 
+
+      if (part == "N/D" || part.contains("ERROR")) {
+        _updateLiveStatus("Avviso: Nessuna risposta valida da $ecuName (Verifica quadro acceso)", StatusType.error);
+      } else {
+        _updateLiveStatus("Comunicazione stabile con $ecuName", StatusType.success);
+      }
+
+      if (mounted) {
+        setState(() {
+          ecuResponseInfo = "$selectedEcu (TX:18DA${id}F1 / RX:18DAF1$id)\nHardware/Part Code: $part";
+        });
+      }
+    } catch (_) {
+      _updateLiveStatus("Errore critico: Mancata risposta o timeout da $ecuName", StatusType.error);
+    }
+
+    obd.startPolling((tick) async {
+      if (!isEcuConnected) return;
+      await profile.pollEcu(obd, selectedEcu, tick);
+      if (mounted) setState(() {});
+    });
+  }
