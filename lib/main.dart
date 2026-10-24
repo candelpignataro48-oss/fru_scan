@@ -99,7 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() { obd.disconnect(); super.dispose(); }
-
   void _showBluetoothDeviceSelector() async {
     setState(() { isConnecting = true; statusMessage = "Richiesta permessi..."; });
     _updateLiveStatus("Richiesta permessi Bluetooth...", StatusType.info);
@@ -155,14 +154,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     obd.stopPolling();
     setState(() { isEcuConnected = false; selectedEcu = "Nessuna"; });
   }
-
   void connectToSelectedEcu(String ecuName) async {
     String id = currentProfile.ecuIds[ecuName] ?? "10";
     setState(() { selectedEcu = ecuName; isEcuConnected = true; currentProfile.dtcVal = "---"; ecuResponseInfo = "Connessione a $ecuName..."; });
     try {
       await obd.initEcuChannel(id);
       String part = await currentProfile.readHardwarePartCode(obd);
-      if (mounted) setState(() { ecuResponseInfo = "$selectedEcu (ID: $id)\nPart Code:$part"; });
+      if (mounted) setState(() { ecuResponseInfo = "$selectedEcu (ID: $id)\nPart Code: $part"; });
     } catch (_) {}
     obd.startPolling((tick) async {
       if (!isEcuConnected) return;
@@ -272,27 +270,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   List<Widget> _cardsForEcu() {
     Widget dtc = _c(Icons.shield_outlined, "Errori (DTC)", currentProfile.dtcVal, "", currentProfile.dtcVal == "0 (OK)" ? Colors.greenAccent : Colors.redAccent, onTap: _showDtcDetails);
+    
     if (selectedBrand == "Fiat/Stellantis") {
       return [
-        _c(Icons.speed, "Giri Motore", stellantisProfile.rpmVal, "RPM", Colors.orangeAccent),
-        _c(Icons.directions_car, "Velocità", stellantisProfile.speedVal, "km/h", Colors.greenAccent),
-        _c(Icons.compress, "Turbina", stellantisProfile.turboVal, "bar", Colors.cyanAccent),
-        _c(Icons.local_gas_station, "Carburante", stellantisProfile.fuelVal, "%", Colors.amber),
-        _c(Icons.bolt, "Batteria", stellantisProfile.batteryVal, "V", Colors.purpleAccent),
-        _c(Icons.thermostat, "Refrigerante", stellantisProfile.coolantVal, "°C", Colors.blueAccent),
+        _c(Icons.speed, "Giri Motore", "0", "RPM", Colors.orangeAccent),
+        _c(Icons.directions_car, "Velocità", "0", "km/h", Colors.greenAccent),
+        _c(Icons.compress, "Turbina", "0.0", "bar", Colors.cyanAccent),
+        _c(Icons.local_gas_station, "Carburante", "---", "%", Colors.amber),
+        _c(Icons.bolt, "Batteria", "12.4", "V", Colors.purpleAccent),
+        _c(Icons.thermostat, "Refrigerante", "90", "°C", Colors.blueAccent),
         dtc,
       ];
     } else {
       return [
-        _c(Icons.speed, "Giri Motore", psaProfile.rpmVal, "RPM", Colors.orangeAccent),
-        _c(Icons.directions_car, "Velocità", psaProfile.speedVal, "km/h", Colors.greenAccent),
-        _c(Icons.thermostat, "Refrigerante", psaProfile.coolantVal, "°C", Colors.blueAccent),
-        _c(Icons.bolt, "Batteria", psaProfile.batteryVal, "V", Colors.purpleAccent),
+        _c(Icons.speed, "Giri Motore", "0", "RPM", Colors.orangeAccent),
+        _c(Icons.directions_car, "Velocità", "0", "km/h", Colors.greenAccent),
+        _c(Icons.thermostat, "Refrigerante", "90", "°C", Colors.blueAccent),
+        _c(Icons.bolt, "Batteria", "12.4", "V", Colors.purpleAccent),
         dtc,
       ];
     }
   }
-
   Widget _ddBox(String label, String? val, List<String> items, ValueChanged<String?>? onChg) => Expanded(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
