@@ -1,148 +1,265 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'obd_service.dart';
+import 'stellantis_profile.dart';
 
-class StellantisProfile {
-  String dtcVal = "---";
-  String dtcDetails = "Nessun errore registrato.";
+enum StatusType { info, success, error }
 
-  String rpmVal = "---", speedVal = "---", turboVal = "---", fuelVal = "---", batteryVal = "---";
-  String coolantVal = "---", oilVal = "---", iatVal = "---", catalystVal = "---", oilLifeVal = "---";
-  String bcmIbsSocVal = "---", bcmBatteryVoltVal = "---", odoVal = "---", extTempVal = "---";
-  String ipcRangeVal = "---", ipcServiceKmVal = "---", ipcVoltVal = "---", ipcTpmsVal = "---";
-  String epsAngleVal = "---", absSpeedVal = "---", airbagStatusVal = "---";
-  String hvacTempVal = "---", radioStatusVal = "---", pamDistVal = "---", accStatusVal = "---";
-  String param1Val = "---", param2Val = "---", param3Val = "---";
+void main() => runApp(const FruScanApp());
 
-  final List<String> brandList = ["Fiat/Stellantis"];
-  final Map<String, String> ecuIds = {
-    "Centralina Motore (ECU)": "10",
-    "Body Computer": "40",
-    "ABS": "28",
-    "Servosterzo": "30",
-    "Airbag": "50",
-    "Quadro Strumenti": "60",
-    "Sensori di Parcheggio": "70",
-    "Radio / Uconnect": "A0",
-    "Climatizzatore": "98",
-    "Cruise Control": "21"
-  };
-
-  Future<String> readHardwarePartCode(ObdService obd, String ecu) async {
-    String res = await obd.queryObd("22 F1 87\r");
-    // Se la centralina rifiuta il comando UDS, tentiamo il Mode 09 SOLO se è la centralina motore
-    if ((res.contains("7F") || res.contains("NO DATA")) && ecu == "Centralina Motore (ECU)") {
-      res = await obd.queryObd("09 02\r");
-    }
-    String val = _parseAscii(res);
-    return val.isEmpty ? "N/D" : val;
-  }
-
-  Future<String> resetDtc(ObdService obd) async {
-    String res = await obd.queryObd("14 FF FF FF\r");
-    if (res.contains("NO DATA") || res.contains("7F") && !res.contains("78")) {
-      return "Errore durante l'azzeramento";
-    }
-    dtcVal = "0 (OK)";
-    return "Comando reset inviato con successo";
-  }
-  Future<void> pollEcu(ObdService obd, String ecu, int tick) async {
-    // Lettura errori ogni 5 cicli
-    if (tick % 5 == 0) {
-      String dtc = await obd.queryObd("19 02 09\r");
-      _parseDtc(dtc);
-    }
-
-    if (ecu == "Centralina Motore (ECU)") {
-      rpmVal = _parse(await obd.queryObd("01 0C\r"), (a, b) => (a * 256 + b) / 4, rpmVal, decimals: 0);
-      speedVal = _parse(await obd.queryObd("01 0D\r"), (a, b) => a.toDouble(), speedVal, decimals: 0);
-      turboVal = _parse(await obd.queryObd("01 0B\r"), (a, b) => (a - 100) / 100, turboVal, decimals: 2);
-      fuelVal = _parse(await obd.queryObd("01 2F\r"), (a, b) => a * 100 / 255, fuelVal, decimals: 0);
-      coolantVal = _parse(await obd.queryObd("01 05\r"), (a, b) => a - 40.0, coolantVal, decimals: 0);
-      oilVal = _parse(await obd.queryObd("01 5C\r"), (a, b) => a - 40.0, oilVal, decimals: 0);
-      iatVal = _parse(await obd.queryObd("01 0F\r"), (a, b) => a - 40.0, iatVal, decimals: 0);
-      catalystVal = _parse(await obd.queryObd("01 3C\r"), (a, b) => ((a * 256 + b) / 10) - 40.0, catalystVal, decimals: 0);
-      batteryVal = _parse(await obd.queryObd("ATRV\r"), null, batteryVal, isVolt: true);
-    } 
-    else {
-      // PER TUTTE LE ALTRE CENTRALINE (Evita l'errore 7F 01 11 bloccante)
-      if (param2Val == "---" || param2Val == "N/D") {
-        param2Val = await readHardwarePartCode(obd, ecu);
-      }
-      String volt = _parse(await obd.queryObd("ATRV\r"), null, "---", isVolt: true);
-      param1Val = volt;
-
-      if (ecu == "Body Computer") bcmBatteryVoltVal = volt;
-      if (ecu == "Quadro Strumenti") ipcVoltVal = volt;
-      
-      param3Val = "Connesso";
-    }
-  }
-  String _parse(String data, double Function(int, int)? formula, String def, {bool isVolt = false, int decimals = 1}) {
-    if (data.contains("NO DATA") || data.contains("STOPPED")) return def;
-    if (isVolt && data.contains("V")) return data.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (data.contains("7F")) return def; 
-    
-    data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
-    data = data.replaceAll(RegExp(r'\s+'), ' ');
-    List<String> hex = data.split(" ");
-    
-    int idx = hex.indexOf("41");
-    if (idx != -1 && hex.length > idx + 2) {
-      try {
-        int a = int.parse(hex[idx + 2], radix: 16);
-        int b = hex.length > idx + 3 ? int.parse(hex[idx + 3], radix: 16) : 0;
-        if (formula != null) {
-          double val = formula(a, b);
-          return decimals == 0 ? val.round().toString() : val.toStringAsFixed(decimals);
-        }
-      } catch (_) {
-        return def;
-      }
-    }
-    return def;
-  }
-
-  String _parseAscii(String data) {
-    if (data.contains("NO DATA") || data.contains("STOPPED") || data.contains("7F")) return "";
-    data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
-    data = data.replaceAll(RegExp(r'\s+'), ' ');
-    List<String> hex = data.split(" ");
-    
-    String ascii = "";
-    for (String h in hex) {
-      if (h.length == 2) {
-        int? val = int.tryParse(h, radix: 16);
-        if (val != null && val >= 32 && val <= 126) ascii += String.fromCharCode(val);
-      }
-    }
-    return ascii;
-  }
-
-  void _parseDtc(String data) {
-    if (data.contains("NO DATA") || data.contains("STOPPED")) {
-      dtcVal = "---";
-      dtcDetails = "Nessuna risposta.";
-      return;
-    }
-
-    List<String> hex = data.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('>', ' ').split(RegExp(r'\s+'));
-    hex.removeWhere((e) => e.isEmpty);
-    
-    int idx = hex.indexOf("59");
-    if (idx != -1 && hex.length > idx + 1 && hex[idx+1] == "02") {
-      if (hex.length <= idx + 3) {
-        dtcVal = "0 (OK)";
-        dtcDetails = "Nessun codice errore rilevato.";
-      } else {
-        dtcVal = "Rilevati";
-        dtcDetails = data;
-      }
-    } else if (data.contains("7F 19")) {
-      dtcVal = "---";
-      dtcDetails = "Lettura momentaneamente non disponibile.";
-    } else {
-      dtcVal = "---";
-      dtcDetails = "Formato dati sconosciuto.";
-    }
-  }
+class FruScanApp extends StatelessWidget {
+  const FruScanApp({super.key});
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'Fru Scan',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: const Color(0xFF0E1113),
+          primaryColor: const Color(0xFFFFB74D),
+        ),
+        home: const DashboardScreen(),
+      );
 }
-// === FINE DEL CODICE ===
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final ObdService obd = ObdService();
+  final StellantisProfile profile = StellantisProfile();
+
+  bool isConnecting = false, isConnected = false, isEcuConnected = false;
+  String statusMessage = "Disconnesso", selectedEcu = "Nessuna", connectedDeviceName = "";
+  String ecuResponseInfo = "Nessuna ECU interrogata";
+  String selectedBrand = "Fiat/Stellantis", selectedModel = "Tipo Cross 1.0 T3";
+
+  String liveStatusText = "Pronto: Connetti l'adattatore Bluetooth OBD";
+  Color liveStatusColor = Colors.orangeAccent;
+  IconData liveStatusIcon = Icons.info_outline;
+
+  void _updateLiveStatus(String text, StatusType type) {
+    setState(() {
+      liveStatusText = text;
+      switch (type) {
+        case StatusType.info:
+          liveStatusColor = Colors.orangeAccent;
+          liveStatusIcon = Icons.sync;
+          break;
+        case StatusType.success:
+          liveStatusColor = Colors.greenAccent;
+          liveStatusIcon = Icons.check_circle_outline;
+          break;
+        case StatusType.error:
+          liveStatusColor = Colors.redAccent;
+          liveStatusIcon = Icons.error_outline;
+          break;
+      }
+    });
+  }
+
+  void _showInfoMenu() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161A1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 22),
+            Expanded(
+              child: Text("Informazioni & Compatibilità",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+            SizedBox(width: 22), 
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Fru Scan",
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("Applicazione di diagnostica avanzata dedicata ai veicoli del gruppo Stellantis.",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              SizedBox(height: 12),
+              Text("Sviluppatore / Autore:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              Text("Fru\nVersione: 1.0.0 (Release)\n© 2026 Fru Scan. Tutti i diritti riservati.",
+                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
+              Divider(color: Colors.grey, height: 24),
+              Text("Adattatori Bluetooth Compatibili:",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
+              SizedBox(height: 6),
+              Text(
+                "• vLinker MC\n"
+                "• vLinker BM\n"
+                "• OBDLink MX+\n"
+                "• OBDLink CX\n"
+                "• ELM327 (solo interfacce con chip PIC18F25K80)",
+                style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB74D),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+  void _showLogsModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateModal) => AlertDialog(
+          backgroundColor: const Color(0xFF161A1D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Log di Diagnostica OBD",
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                onPressed: () {
+                  obd.clearLogs();
+                  setStateModal(() {});
+                },
+                tooltip: "Svuota log",
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 350,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Text(
+                  obd.getLogs().isEmpty ? "Nessun log registrato..." : obd.getLogs(),
+                  style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: obd.getLogs()));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Log copiati negli appunti!")),
+                );
+              },
+              child: const Text("Copia Log", style: TextStyle(color: Color(0xFFFFB74D))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFB74D), foregroundColor: Colors.black),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Chiudi", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    obd.disconnect();
+    super.dispose();
+  }
+
+  void _showBluetoothDeviceSelector() async {
+    setState(() {
+      isConnecting = true;
+      statusMessage = "Richiesta permessi...";
+    });
+    _updateLiveStatus("Richiesta permessi Bluetooth in corso...", StatusType.info);
+
+    await [
+      Permission.bluetooth,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.location
+    ].request();
+
+    setState(() => statusMessage = "Lettura dispositivi...");
+    _updateLiveStatus("Scansione dispositivi Bluetooth associati...", StatusType.info);
+
+    try {
+      List<BluetoothDevice> devs = await obd.getBondedDevices();
+      setState(() {
+        isConnecting = false;
+        statusMessage = "Seleziona interfaccia";
+      });
+      _updateLiveStatus("Seleziona l'interfaccia OBD dalla lista", StatusType.info);
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF161A1D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Dispositivi Bluetooth",
+              style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+            child: devs.isEmpty
+                ? const Center(
+
+child: Text("Nessun dispositivo associato.",
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)))
+            : ListView.builder(
+                itemCount: devs.length,
+                itemBuilder: (c, i) => ListTile(
+                  leading: const Icon(Icons.bluetooth, color: Color(0xFFFFB74D)),
+                  title: Text(devs[i].name ?? "Dispositivo",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  subtitle: Text(devs[i].address, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    connectToDevice(devs[i]);
+                  },
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _updateLiveStatus("Connessione annullata dall'utente", StatusType.info);
+            },
+            child: const Text("Annulla", style: TextStyle(color: Colors.grey)))
+      ],
+    ),
+  );
+} catch (_) {
+  setState(() {
+    isConnecting = false;
+    statusMessage = "Errore scansione Bluetooth";
+  });
+  _updateLiveStatus("Errore: Impossibile completare la scansione Bluetooth", StatusType.error);
+}
+}
