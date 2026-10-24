@@ -347,3 +347,96 @@ child: Text("Nessun dispositivo associato.",
       if (mounted) setState(() {});
     });
   }
+  void _showEcuSelector() {
+    if (!isConnected) {
+      _updateLiveStatus("Azione bloccata: Connetti prima l'adattatore Bluetooth OBD", StatusType.error);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Prima connetti il Bluetooth OBD!")));
+      return;
+    }
+    final keys = profile.ecuIds.keys.toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161A1D),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(16),
+        height: 450,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Seleziona Centralina (ECU)",
+                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                itemCount: keys.length,
+                itemBuilder: (c, i) {
+                  final ecu = keys[i];
+                  final bool sel = selectedEcu == ecu && isEcuConnected;
+                  return ListTile(
+                    title: Text(ecu,
+                        style: TextStyle(
+                            color: sel ? const Color(0xFFFFB74D) : Colors.white,
+                            fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
+                    trailing: sel ? const Icon(Icons.check, color: Color(0xFFFFB74D)) : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      connectToSelectedEcu(ecu);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDtcDetails() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161A1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Dettagli Errori (DTC)", 
+            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Codici rilevati in centralina:", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(
+              profile.dtcDetails, 
+              style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.4)
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Chiudi", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800]),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              _updateLiveStatus("Invio comando azzeramento errori (DTC)...", StatusType.info);
+              String result = await profile.resetDtc(obd);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+                setState(() {
+                  profile.dtcVal = "0 (OK)";
+                });
+                _updateLiveStatus("Errori azzerati con successo sulla centralina", StatusType.success);
+              }
+            },
+            child: const Text("Azzera Errori", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
