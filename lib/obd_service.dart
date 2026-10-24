@@ -11,6 +11,9 @@ class ObdService {
   String _internalLogs = "";
   Timer? _pollingTimer;
 
+  StreamSubscription<Uint8List>? _incomingSub;
+  String _rxBuffer = "";
+
   bool get isConnected => _isConnected;
 
   void _log(String text) {
@@ -28,7 +31,6 @@ class ObdService {
 
   Future<List<BluetoothDevice>> getBondedDevices() async {
     try {
-      // Metodo corretto della libreria bluetooth serial
       List<BluetoothDevice> devices = await FlutterBluetoothSerial.instance.getBondedDevices();
       return devices;
     } catch (e) {
@@ -43,6 +45,13 @@ class ObdService {
       _connection = await BluetoothConnection.toAddress(device.address);
       _isConnected = true;
       _log("Connessione Bluetooth stabilita con successo.");
+
+      // Ascolto permanente e unico del flusso dati in ingresso
+      _rxBuffer = "";
+      _incomingSub?.cancel();
+      _incomingSub = _connection!.input?.listen((Uint8List data) {
+        _rxBuffer += String.fromCharCodes(data);
+      });
 
       // Inizializzazione base adattatore ELM327 / vLinker
       await queryObd("AT Z\r"); // Reset adattatore
@@ -61,6 +70,7 @@ class ObdService {
 
   void disconnect() {
     stopPolling();
+    _incomingSub?.cancel();
     try {
       _connection?.close();
     } catch (_) {}
@@ -68,13 +78,11 @@ class ObdService {
     _log("Disconnesso correttamente.");
   }
 
-  /// Inizializzazione del canale di comunicazione UDS 29-bit con routing MS-CAN (pin 3/11)
   Future<bool> initEcuChannel(String ecuId) async {
     if (!_isConnected) return false;
 
     _log("Inizializzazione canale ECU ID: $ecuId");
 
-    // I moduli 70 (Parking), A0 (Radio), 98 (Clima) richiedono la rete MS-CAN (pin 3/11)
     bool isMsCan = (ecuId == "70" || ecuId == "A0" || ecuId == "98");
 
     try {
@@ -113,27 +121,34 @@ class ObdService {
 
     try {
       _log("TX: $command");
+      // Pulisce il buffer prima di ogni comando
+      _rxBuffer = "";
+
       _connection!.output.add(Uint8List.fromList(command.codeUnits));
-      await _connection!.output.allSent; // Corretto da metodo a getter asincrono
+      await _connection!.output.allSent;
 
       Completer<String> completer = Completer();
-      String response = "";
+      Timer? checkTimer;
+      Timer? timeoutTimer;
 
-      var subscription;
-      subscription = _connection!.input!.listen((Uint8List data) {
-        response += String.fromCharCodes(data);
-        if (response.contains(">")) {
-          subscription.cancel();
-          if (!completer.isCompleted) completer.complete(response);
+      void finish(String result) {
+        if (!completer.isCompleted) {
+          checkTimer?.cancel();
+          timeoutTimer?.cancel();
+          completer.complete(result);
+        }
+      }
+
+      // Controlla il buffer finché non arriva il prompt di fine risposta '>'
+      checkTimer = Timer.periodic(const Duration(milliseconds: 20), (timer) {
+        if (_rxBuffer.contains(">")) {
+          finish(_rxBuffer);
         }
       });
 
-      // Timeout di sicurezza di 1.2 secondi per evitare blocchi
-      Timer(const Duration(milliseconds: 1200), () {
-        if (!completer.isCompleted) {
-          subscription.cancel();
-          completer.complete(response.isEmpty ? "NO DATA" : response);
-        }
+      // Timeout di sicurezza di 1.2 secondi
+      timeoutTimer = Timer(const Duration(milliseconds: 1200), () {
+        finish(_rxBuffer.isEmpty ? "NO DATA" : _rxBuffer);
       });
 
       String res = await completer.future;
