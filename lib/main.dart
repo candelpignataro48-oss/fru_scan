@@ -70,19 +70,16 @@ class _FruScanHomeState extends State<FruScanHome> {
     if (_selectedDeviceAddress == null) return;
     
     try {
-      // Dichiarazione sicura al 100% per le regole di Null Safety di Dart
       BluetoothDevice deviceToConnect = _devices.firstWhere((d) => d.address == _selectedDeviceAddress);
       
       setState(() => _isConnecting = true);
       bool success = await _obdService.connectToDevice(deviceToConnect);
       setState(() => _isConnecting = false);
       
-      // Inizializza il canale solo se abbiamo una ECU valida e la connessione è riuscita
       if (success && _selectedEcuId != null) {
         await _obdService.initEcuChannel(_selectedEcuId!);
       }
     } catch (_) {
-      // Se si verifica un errore durante l'estrazione del dispositivo, si ferma
       return;
     }
   }
@@ -108,9 +105,129 @@ class _FruScanHomeState extends State<FruScanHome> {
 
   @override
   Widget build(BuildContext context) {
-    // Sicurezza per la tendina ECU: se il valore selezionato non fa parte della lista attuale, lo resetta
     if (_selectedEcuId != null && !currentEcuIds.containsKey(_selectedEcuId)) {
       _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
     }
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Fru Scan - Diagnostica'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedDeviceAddress,
+              hint: const Text("Seleziona dispositivo Bluetooth"),
+              items: _devices.map((d) {
+                return DropdownMenuItem<String>(
+                  value: d.address,
+                  child: Text(d.name ?? d.address),
+                );
+              }).toList(),
+              onChanged: (val) {
+                setState(() {
+                  _selectedDeviceAddress = val;
+                });
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: _isConnecting || _obdService.isConnected ? null : _connect,
+                  child: Text(_isConnecting ? 'Connessione in corso...' : 'Connetti'),
+                ),
+                ElevatedButton(
+                  onPressed: !_obdService.isConnected ? null : _disconnect,
+                  child: const Text('Disconnetti'),
+                ),
+              ],
+            ),
+            const Divider(),
+            Row(
+              children: [
+                const Text("Marca Auto: ", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 10),
+                DropdownButton<String>(
+                  value: _selectedBrand,
+                  items: ["Fiat", "Citroën"].map((b) {
+                    return DropdownMenuItem<String>(
+                      value: b,
+                      child: Text(b),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedBrand = val!;
+                      _selectedEcuId = currentEcuIds.keys.isNotEmpty ? currentEcuIds.keys.first : null;
+                    });
+                    if (_obdService.isConnected && _selectedEcuId != null) {
+                      _obdService.initEcuChannel(_selectedEcuId!);
+                    }
+                  },
+                ),
+              ],
+            ),
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedEcuId,
+              hint: const Text("Seleziona Centralina"),
+              items: currentEcuIds.entries.map((e) {
+                return DropdownMenuItem<String>(
+                  value: e.key,
+                  child: Text("${e.key} - ${e.value}"),
+                );
+              }).toList(),
+              onChanged: (val) async {
+                setState(() {
+                  _selectedEcuId = val;
+                });
+                if (_obdService.isConnected && val != null) {
+                  await _obdService.initEcuChannel(val);
+                }
+              },
+            ),
+            const SizedBox(height: 5),
+            ElevatedButton(
+              onPressed: !_obdService.isConnected ? null : _togglePolling,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isPolling ? Colors.red.shade300 : Colors.green.shade400,
+              ),
+              child: Text(_isPolling ? 'Ferma Lettura Dati' : 'Avvia Lettura Dati'),
+            ),
+            const Divider(),
+            const Text("Terminale di Bordo (Log):", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            Expanded(
+              child: Container(
+                color: Colors.black87,
+                width: double.infinity,
+                padding: const EdgeInsets.all(8.0),
+                child: StreamBuilder<String>(
+                  stream: _obdService.logStream,
+                  builder: (context, snapshot) {
+                    return SingleChildScrollView(
+                      reverse: true,
+                      child: Text(
+                        _obdService.getLogs(),
+                        style: const TextStyle(
+                          color: Colors.greenAccent, 
+                          fontFamily: 'monospace', 
+                          fontSize: 12
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
