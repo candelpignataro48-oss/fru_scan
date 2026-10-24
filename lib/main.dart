@@ -69,12 +69,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF161A1D),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.info_outline, color: Color(0xFFFFB74D), size: 22),
-            SizedBox(width: 8),
-            Text("Informazioni & Compatibilità",
-                style: TextStyle(color: Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text("Informazioni & Compatibilità",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFFFFB74D), fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+            SizedBox(width: 22), 
           ],
         ),
         content: const SingleChildScrollView(
@@ -90,16 +92,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SizedBox(height: 12),
               Text("Sviluppatore / Autore:",
                   style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
-              Text("Fru\nVersione: 1.0.0 (Release)",
+              Text("Fru\nVersione: 1.0.0 (Release)\n© 2026 Fru Scan. Tutti i diritti riservati.",
                   style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.3)),
               Divider(color: Colors.grey, height: 24),
               Text("Adattatori Bluetooth Compatibili:",
                   style: TextStyle(color: Color(0xFFFFB74D), fontSize: 13, fontWeight: FontWeight.bold)),
               SizedBox(height: 6),
               Text(
-                "• vLinker MC / vLinker BM (Consigliato: pieno supporto protocolli CAN e SW-CAN)\n\n"
-                "• OBDLink MX+ / OBDLink CX\n\n"
-                "• Interfacce ELM327 originali o cloni di qualità basati su chip PIC18F25K80",
+                "• vLinker MC\n"
+                "• vLinker BM\n"
+                "• OBDLink MX+\n"
+                "• OBDLink CX\n"
+                "• ELM327 (solo interfacce con chip PIC18F25K80)",
                 style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
               ),
             ],
@@ -118,7 +122,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-
   void _showLogsModal() {
     showDialog(
       context: context,
@@ -186,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     obd.disconnect();
     super.dispose();
   }
+
   void _showBluetoothDeviceSelector() async {
     setState(() {
       isConnecting = true;
@@ -863,3 +867,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+// === FINE DEL CODICE ===
