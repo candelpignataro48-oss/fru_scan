@@ -1,19 +1,26 @@
 import 'obd_service.dart';
 
 class StellantisProfile {
+  // Stato errori DTC
   String dtcVal = "---";
   String dtcDetails = "Nessun errore registrato.";
 
+  // Parametri Motore & Sensori Generali
   String rpmVal = "---", speedVal = "---", turboVal = "---", fuelVal = "---", batteryVal = "---";
   String coolantVal = "---", oilVal = "---", iatVal = "---", catalystVal = "---", oilLifeVal = "---";
+  
+  // Parametri specifici Body & Quadro
   String bcmIbsSocVal = "---", bcmBatteryVoltVal = "---", odoVal = "---", extTempVal = "---";
   String ipcRangeVal = "---", ipcServiceKmVal = "---", ipcVoltVal = "---", ipcTpmsVal = "---";
+  
+  // Parametri Servosterzo, ABS, Airbag, Clima, Radio, PAM, Cruise
   String epsAngleVal = "---", absSpeedVal = "---", airbagStatusVal = "---";
   String hvacTempVal = "---", radioStatusVal = "---", pamDistVal = "---", accStatusVal = "---";
   String param1Val = "---", param2Val = "---", param3Val = "---";
 
   final List<String> brandList = ["Fiat/Stellantis"];
 
+  // Mappatura ID UDS / CAN 29-bit standard per architettura FCA
   final Map<String, String> ecuIds = {
     "Centralina Motore (ECU)": "10",
     "Body Computer": "40",
@@ -27,9 +34,9 @@ class StellantisProfile {
     "Cruise Control": "21"
   };
 
+  /// Interroga il codice parte hardware (DID F187) o fallback su identificativo motore (09 02)
   Future<String> readHardwarePartCode(ObdService obd, String ecu) async {
     String res = await obd.queryObd("22 F1 87\r");
-    // Se la centralina rifiuta il comando UDS, tentiamo il Mode 09 SOLO se è la centralina motore
     if ((res.contains("7F") || res.contains("NO DATA")) && ecu == "Centralina Motore (ECU)") {
       res = await obd.queryObd("09 02\r");
     }
@@ -37,17 +44,26 @@ class StellantisProfile {
     return val.isEmpty ? "N/D" : val;
   }
 
+  /// Comando universale di reset/cancellazione DTC (Servizio UDS 14)
   Future<String> resetDtc(ObdService obd) async {
     String res = await obd.queryObd("14 FF FF FF\r");
-    if (res.contains("NO DATA") || res.contains("7F") && !res.contains("78")) {
+    if (res.contains("NO DATA") || (res.contains("7F") && !res.contains("78"))) {
       return "Errore durante l'azzeramento";
     }
     dtcVal = "0 (OK)";
     return "Comando reset inviato con successo";
   }
 
+  /// Ciclo di polling periodico ottimizzato per evitare conflitti sul bus
   Future<void> pollEcu(ObdService obd, String ecu, int tick) async {
-    // Lettura errori ogni 5 cicli
+    // Al primo tick puliamo i parametri specifici per evitare cross-data tra centraline
+    if (tick == 0) {
+      param2Val = "---";
+      param1Val = "---";
+      param3Val = "---";
+    }
+
+    // Interrogazione DTC a cadenza controllata (ogni 5 cicli)
     if (tick % 5 == 0) {
       String dtc = await obd.queryObd("19 02 09\r");
       _parseDtc(dtc);
@@ -65,24 +81,31 @@ class StellantisProfile {
       batteryVal = _parse(await obd.queryObd("ATRV\r"), null, batteryVal, isVolt: true);
     } 
     else {
-      // PER TUTTE LE ALTRE CENTRALINE (Evita l'errore 7F 01 11 bloccante)
+      // Per tutte le altre ECU leggiamo l'Hardware ID dedicato se non ancora acquisito
       if (param2Val == "---" || param2Val == "N/D") {
         param2Val = await readHardwarePartCode(obd, ecu);
       }
+      
       String volt = _parse(await obd.queryObd("ATRV\r"), null, "---", isVolt: true);
       param1Val = volt;
 
-      if (ecu == "Body Computer") bcmBatteryVoltVal = volt;
-      if (ecu == "Quadro Strumenti") ipcVoltVal = volt;
+      if (ecu == "Body Computer") {
+        bcmBatteryVoltVal = volt;
+        fuelVal = "---"; // Evita letture PID motore su nodi non compatibili
+      }
+      if (ecu == "Quadro Strumenti") {
+        ipcVoltVal = volt;
+      }
       
-      param3Val = "Connesso";
+      param3Val = param2Val != "N/D" ? "Connesso" : "In attesa";
     }
   }
 
+  /// Parser matematico standard SAE J1979 per PID numerici
   String _parse(String data, double Function(int, int)? formula, String def, {bool isVolt = false, int decimals = 1}) {
     if (data.contains("NO DATA") || data.contains("STOPPED")) return def;
     if (isVolt && data.contains("V")) return data.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (data.contains("7F")) return def; 
+    if (data.contains("7F") && !data.contains("78")) return def;
     
     data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
     data = data.replaceAll(RegExp(r'\s+'), ' ');
@@ -104,22 +127,41 @@ class StellantisProfile {
     return def;
   }
 
+  /// Parser robusto per flussi UDS multi-frame e conversione ASCII pulita
   String _parseAscii(String data) {
-    if (data.contains("NO DATA") || data.contains("STOPPED") || data.contains("7F")) return "";
+    if (data.contains("NO DATA") || data.contains("STOPPED")) return "";
+    
+    // Rimuove i metadati di sequenza ISO-TP (es. 0:, 1:, 2:) e codici CAN spuri
+    data = data.replaceAll(RegExp(r'[0-9]:'), ' ');
+    data = data.replaceAll(RegExp(r'\b[0-9A-Fa-f]{3}\b'), ' ');
     data = data.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll(">", " ").trim();
     data = data.replaceAll(RegExp(r'\s+'), ' ');
-    List<String> hex = data.split(" ");
     
+    List<String> hex = data.split(" ");
     String ascii = "";
-    for (String h in hex) {
-      if (h.length == 2) {
-        int? val = int.tryParse(h, radix: 16);
-        if (val != null && val >= 32 && val <= 126) ascii += String.fromCharCode(val);
+    
+    int startIdx = 0;
+    // Cerca l'header di risposta positiva UDS (62 per DID o 49 per Info veicolo)
+    for (int i = 0; i < hex.length; i++) {
+      if ((hex[i] == "62" || hex[i] == "49") && i + 2 < hex.length) {
+        startIdx = i + 3; 
+        break;
       }
     }
-    return ascii;
+
+    for (int i = startIdx; i < hex.length; i++) {
+      if (hex[i].length == 2) {
+        int? val = int.tryParse(hex[i], radix: 16);
+        // Filtra solo caratteri stampabili ASCII validi
+        if (val != null && val >= 32 && val <= 126) {
+          ascii += String.fromCharCode(val);
+        }
+      }
+    }
+    return ascii.trim();
   }
 
+  /// Parser diagnostico DTC con gestione dei messaggi di attesa (Response Pending 7F ... 78)
   void _parseDtc(String data) {
     if (data.contains("NO DATA") || data.contains("STOPPED")) {
       dtcVal = "---";
@@ -139,13 +181,15 @@ class StellantisProfile {
         dtcVal = "Rilevati";
         dtcDetails = data;
       }
-    } else if (data.contains("7F 19")) {
+    } else if (data.contains("7F 19 78") || data.contains("78")) {
       dtcVal = "---";
-      dtcDetails = "Lettura momentaneamente non disponibile.";
+      dtcDetails = "In attesa elaborazione centralina (Response Pending).";
+    } else if (data.contains("7F")) {
+      dtcVal = "---";
+      dtcDetails = "Risposta negativa dalla centralina.";
     } else {
       dtcVal = "---";
       dtcDetails = "Formato dati sconosciuto.";
     }
   }
 }
-// === FINE DEL CODICE ===
